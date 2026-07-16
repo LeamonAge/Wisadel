@@ -22,7 +22,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: '理智',
+    title: 'Wisadel',
     backgroundColor: '#1a1a1a',
     show: false,
     webPreferences: {

@@ -1,5 +1,5 @@
 appId: com.sanity.app
-productName: 理智
+productName: Wisadel
 copyright: Copyright © 2026 LeamonAge
 directories:
   output: release
@@ -21,7 +21,7 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: assets/icon.png
+  icon: assets/Wisadel.ico
 nsis:
   oneClick: false
   perMachine: true
@@ -29,7 +29,11 @@ nsis:
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: 理智
+  shortcutName: Wisadel
+  artifactName: Wisadel-${version}-${arch}.${ext}
+  installerHeader: assets/installer-header.bmp
+  installerSidebar: assets/installer-sidebar.bmp
+  uninstallerSidebar: assets/uninstaller-sidebar.bmp
 publish:
   - provider: github
     owner: LeamonAge
