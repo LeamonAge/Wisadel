@@ -1,6 +1,6 @@
 {
   "name": "wisadel",
-  "version": "0.1.10",
+  "version": "0.1.15",
   "main": "main.js",
   "dependencies": {
     "electron-updater": "^6.6.3",
@@ -45,14 +45,7 @@
       "main.js",
       "preload.js",
       "dist/**/*",
-      "assets/**/*",
-      "!node_modules/**/*",
-      "node_modules/electron-updater/**/*",
-      "node_modules/semver/**/*",
-      "node_modules/builder-util-runtime/**/*",
-      "node_modules/js-yaml/**/*",
-      "node_modules/argparse/**/*",
-      "node_modules/lodash.isequal/**/*"
+      "assets/**/*"
     ],
     "win": {
       "target": [

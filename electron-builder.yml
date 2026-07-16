@@ -1,5 +1,5 @@
 appId: com.sanity.app
-productName: 理智
+productName: Wisadel
 copyright: Copyright © 2026 LeamonAge
 directories:
   output: release
@@ -9,13 +9,6 @@ files:
   - preload.js
   - dist/**/*
   - assets/**/*
-  - "!node_modules/**/*"
-  - node_modules/electron-updater/**/*
-  - node_modules/semver/**/*
-  - node_modules/builder-util-runtime/**/*
-  - node_modules/js-yaml/**/*
-  - node_modules/argparse/**/*
-  - node_modules/lodash.isequal/**/*
 win:
   target:
     - target: nsis
@@ -29,7 +22,7 @@ nsis:
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: 理智
+  shortcutName: Wisadel
 publish:
   - provider: github
     owner: LeamonAge
