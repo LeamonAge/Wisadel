@@ -1,13 +1,4 @@
 import React from 'react';
-import {
-  View,
-  TextInput,
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
 import { useTheme } from '../stores/themeStore';
 
 interface ChatInputProps {
@@ -19,83 +10,47 @@ interface ChatInputProps {
   isStreaming: boolean;
 }
 
-export function ChatInput({ value, onChangeText, onSend, onCancel, disabled, isStreaming }: ChatInputProps) {
-  const { colors } = useTheme();
-
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      <View style={[styles.container, { backgroundColor: colors.bg, borderTopColor: colors.border }]}>
-        {isStreaming && (
-          <TouchableOpacity
-            style={[styles.stopBtn, { backgroundColor: colors.error }]}
-            onPress={onCancel}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.stopIcon}>■</Text>
-            <Text style={styles.stopText}>停止生成</Text>
-          </TouchableOpacity>
-        )}
-        <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-          <TextInput
-            style={[styles.input, { color: colors.textPrimary }]}
-            value={value}
-            onChangeText={onChangeText}
-            placeholder="发送消息..."
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            maxLength={4000}
-            editable={!disabled}
-            textAlignVertical="center"
-            returnKeyType="default"
-          />
-          <TouchableOpacity
-            style={[styles.sendBtn, { backgroundColor: colors.accent }, disabled && styles.sendBtnDisabled]}
-            onPress={onSend}
-            disabled={disabled || !value.trim()}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.sendIcon}>↑</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
-  );
-}
-
-const styles = StyleSheet.create({
+const styles: Record<string, React.CSSProperties> = {
   container: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderTopWidth: 0.5,
+    padding: '8px 12px',
+    borderTop: '0.5px solid',
+    flexShrink: 0,
   },
   inputWrapper: {
-    flexDirection: 'row',
+    display: 'flex',
     alignItems: 'flex-end',
     borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    border: '1px solid',
+    padding: '4px 12px',
   },
   input: {
     flex: 1,
     fontSize: 15,
     maxHeight: 100,
-    paddingVertical: 8,
+    padding: '8px 0',
+    border: 'none',
+    outline: 'none',
+    resize: 'none',
+    fontFamily: 'inherit',
+    lineHeight: '20px',
+    backgroundColor: 'transparent',
   },
   sendBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
+    display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
     marginBottom: 4,
+    border: 'none',
+    cursor: 'pointer',
+    flexShrink: 0,
   },
   sendBtnDisabled: {
-    backgroundColor: '#444',
+    opacity: 0.4,
+    cursor: 'not-allowed',
   },
   sendIcon: {
     fontSize: 16,
@@ -103,15 +58,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   stopBtn: {
-    flexDirection: 'row',
+    display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    padding: '8px 16px',
     borderRadius: 10,
     marginBottom: 8,
+    border: 'none',
+    cursor: 'pointer',
     alignSelf: 'center',
+    width: 'auto',
   },
   stopIcon: {
     fontSize: 12,
@@ -121,6 +78,54 @@ const styles = StyleSheet.create({
   stopText: {
     fontSize: 13,
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: 600,
   },
-});
+};
+
+export function ChatInput({ value, onChangeText, onSend, onCancel, disabled, isStreaming }: ChatInputProps) {
+  const { colors } = useTheme();
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSend();
+    }
+  };
+
+  return (
+    <div style={{ ...styles.container, backgroundColor: colors.bg, borderTopColor: colors.border }}>
+      {isStreaming && (
+        <button
+          onClick={onCancel}
+          style={{ ...styles.stopBtn, backgroundColor: colors.error }}
+        >
+          <span style={styles.stopIcon}>■</span>
+          <span style={styles.stopText}>停止生成</span>
+        </button>
+      )}
+      <div style={{ ...styles.inputWrapper, backgroundColor: colors.inputBg, borderColor: colors.border }}>
+        <textarea
+          value={value}
+          onChange={(e) => onChangeText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="发送消息... (Enter 发送, Shift+Enter 换行)"
+          style={{ ...styles.input, color: colors.textPrimary }}
+          maxLength={4000}
+          disabled={disabled}
+          rows={1}
+        />
+        <button
+          onClick={onSend}
+          disabled={disabled || !value.trim()}
+          style={{
+            ...styles.sendBtn,
+            backgroundColor: colors.accent,
+            ...((disabled || !value.trim()) ? styles.sendBtnDisabled : {}),
+          }}
+        >
+          <span style={styles.sendIcon}>↑</span>
+        </button>
+      </div>
+    </div>
+  );
+}

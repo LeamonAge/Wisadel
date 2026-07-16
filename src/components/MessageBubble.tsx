@@ -1,5 +1,4 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
 import { Message } from '../types';
 import { useTheme } from '../stores/themeStore';
 import { ThinkingBlock } from './ThinkingBlock';
@@ -9,68 +8,18 @@ interface MessageBubbleProps {
   message: Message;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
-  const { colors } = useTheme();
-  const isUser = message.role === 'user';
-  const isError = message.type === 'error';
-
-  return (
-    <View style={[styles.container, isUser ? styles.userContainer : styles.aiContainer]}>
-      <View
-        style={[
-          styles.bubble,
-          isUser
-            ? [styles.userBubble, { backgroundColor: colors.bubbleUser[0] }]
-            : isError
-            ? [styles.errorBubble, { backgroundColor: 'rgba(192, 0, 0, 0.1)', borderLeftColor: colors.error }]
-            : [styles.aiBubble, { backgroundColor: colors.bubbleAi }],
-        ]}
-      >
-        {isError && (
-          <Text style={[styles.errorText, { color: colors.error }]} selectable>
-            {message.content}
-          </Text>
-        )}
-
-        {message.toolCall && (
-          <ToolCallCard toolCall={message.toolCall} />
-        )}
-
-        {message.thinkingContent && (
-          <ThinkingBlock content={message.thinkingContent} />
-        )}
-
-        {!isError && !message.toolCall && (
-          <Text
-            style={[
-              styles.text,
-              { color: isUser ? '#FFFFFF' : colors.textPrimary },
-            ]}
-            selectable
-          >
-            {message.content}
-          </Text>
-        )}
-
-        {message.sanityCost && message.sanityCost > 0 && (
-          <Text style={styles.sanityCost}>🧠 -{message.sanityCost}</Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
+const styles: Record<string, React.CSSProperties> = {
   container: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    padding: '4px 12px',
     maxWidth: '100%',
   },
   userContainer: {
-    alignItems: 'flex-end',
+    display: 'flex',
+    justifyContent: 'flex-end',
   },
   aiContainer: {
-    alignItems: 'flex-start',
+    display: 'flex',
+    justifyContent: 'flex-start',
   },
   bubble: {
     maxWidth: '85%',
@@ -84,16 +33,21 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   errorBubble: {
-    borderLeftWidth: 2,
+    borderLeft: '2px solid',
     borderBottomLeftRadius: 4,
   },
   text: {
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: '22px',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
   },
   errorText: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: '20px',
+    userSelect: 'text',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
   },
   sanityCost: {
     marginTop: 4,
@@ -101,4 +55,39 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'right',
   },
-});
+};
+
+export function MessageBubble({ message }: MessageBubbleProps) {
+  const { colors } = useTheme();
+  const isUser = message.role === 'user';
+
+  return (
+    <div style={{ ...styles.container, ...(isUser ? styles.userContainer : styles.aiContainer) }}>
+      <div
+        style={{
+          ...styles.bubble,
+          ...(isUser
+            ? { ...styles.userBubble, backgroundColor: colors.bubbleUser[0] }
+            : { ...styles.aiBubble, backgroundColor: colors.bubbleAi }),
+        }}
+      >
+        {message.thinkingContent && (
+          <ThinkingBlock content={message.thinkingContent} />
+        )}
+
+        <div
+          style={{
+            ...styles.text,
+            color: isUser ? '#FFFFFF' : colors.textPrimary,
+          }}
+        >
+          {message.content}
+        </div>
+
+        {message.sanityCost && message.sanityCost > 0 && (
+          <div style={styles.sanityCost}>🧠 -{message.sanityCost}</div>
+        )}
+      </div>
+    </div>
+  );
+}

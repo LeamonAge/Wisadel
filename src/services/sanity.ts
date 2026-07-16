@@ -1,15 +1,13 @@
-import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SanityState, Transaction } from '../types';
 import { SanityCosts } from '../utils/constants';
 
 const SANITY_KEY = 'sanity_state';
-const INITIAL_BALANCE = 100; // 新用户赠送 100 理智
+const INITIAL_BALANCE = 100;
 
-// ===== 理智系统服务 =====
+// ===== 理智系统服务（Electron 版，使用 localStorage） =====
 export async function getSanityState(): Promise<SanityState> {
   try {
-    const raw = await AsyncStorage.getItem(SANITY_KEY);
+    const raw = localStorage.getItem(SANITY_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
   const defaultState: SanityState = {
@@ -26,7 +24,7 @@ export async function getSanityState(): Promise<SanityState> {
       },
     ],
   };
-  await AsyncStorage.setItem(SANITY_KEY, JSON.stringify(defaultState));
+  localStorage.setItem(SANITY_KEY, JSON.stringify(defaultState));
   return defaultState;
 }
 
@@ -50,7 +48,7 @@ export async function consumeSanity(
   state.balance -= amount;
   state.totalConsumed += amount;
   state.transactions.push(tx);
-  await AsyncStorage.setItem(SANITY_KEY, JSON.stringify(state));
+  localStorage.setItem(SANITY_KEY, JSON.stringify(state));
   return state;
 }
 
@@ -69,6 +67,6 @@ export async function rechargeSanity(
   state.balance += amount;
   state.totalRecharged += amount;
   state.transactions.push(tx);
-  await AsyncStorage.setItem(SANITY_KEY, JSON.stringify(state));
+  localStorage.setItem(SANITY_KEY, JSON.stringify(state));
   return state;
 }

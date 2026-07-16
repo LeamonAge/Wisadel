@@ -1,10 +1,36 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../stores/themeStore';
 
 interface ThinkingBlockProps {
   content: string;
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    marginTop: 4,
+  },
+  header: {
+    padding: '4px 8px',
+    borderRadius: 6,
+    display: 'inline-block',
+    cursor: 'pointer',
+    border: 'none',
+    fontSize: 12,
+  },
+  body: {
+    marginTop: 4,
+    padding: 10,
+    borderRadius: 8,
+    borderLeft: '2px solid #C00000',
+  },
+  content: {
+    fontSize: 13,
+    lineHeight: '20px',
+    userSelect: 'text',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+  },
+};
 
 export function ThinkingBlock({ content }: ThinkingBlockProps) {
   const { colors } = useTheme();
@@ -13,48 +39,24 @@ export function ThinkingBlock({ content }: ThinkingBlockProps) {
   if (!content) return null;
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        style={[styles.header, { backgroundColor: 'rgba(192, 0, 0, 0.08)' }]}
-        onPress={() => setExpanded(!expanded)}
-        activeOpacity={0.7}
+    <div style={styles.container}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          ...styles.header,
+          backgroundColor: 'rgba(192, 0, 0, 0.08)',
+          color: colors.accentLight,
+        }}
       >
-        <Text style={[styles.headerText, { color: colors.accentLight }]}>
-          {expanded ? '💭 思考过程 ▾' : '💭 思考过程 ▸'}
-        </Text>
-      </TouchableOpacity>
+        {expanded ? '💭 思考过程 ▾' : '💭 思考过程 ▸'}
+      </button>
       {expanded && (
-        <View style={[styles.body, { backgroundColor: 'rgba(192, 0, 0, 0.06)', borderLeftColor: '#C00000' }]}>
-          <Text style={[styles.content, { color: colors.textSecondary }]} selectable>
+        <div style={{ ...styles.body, backgroundColor: 'rgba(192, 0, 0, 0.06)' }}>
+          <div style={{ ...styles.content, color: colors.textSecondary }}>
             {content}
-          </Text>
-        </View>
+          </div>
+        </div>
       )}
-    </View>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginTop: 4,
-  },
-  header: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  headerText: {
-    fontSize: 12,
-  },
-  body: {
-    marginTop: 4,
-    padding: 10,
-    borderRadius: 8,
-    borderLeftWidth: 2,
-  },
-  content: {
-    fontSize: 13,
-    lineHeight: 20,
-  },
-});

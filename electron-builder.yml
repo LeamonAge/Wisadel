@@ -1,0 +1,37 @@
+appId: com.sanity.app
+productName: 理智
+copyright: Copyright © 2026 LeamonAge
+directories:
+  output: release
+  buildResources: assets
+files:
+  - main.js
+  - preload.js
+  - dist/**/*
+  - assets/**/*
+  - "!node_modules/**/*"
+  - node_modules/electron-updater/**/*
+  - node_modules/semver/**/*
+  - node_modules/builder-util-runtime/**/*
+  - node_modules/js-yaml/**/*
+  - node_modules/argparse/**/*
+  - node_modules/lodash.isequal/**/*
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icon.png
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 理智
+publish:
+  - provider: github
+    owner: LeamonAge
+    repo: Wisadel
+    private: false

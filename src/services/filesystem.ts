@@ -1,54 +1,29 @@
-import { File, Directory, Paths } from 'expo-file-system';
 import { FileInfo } from '../types';
 
-// ===== 文件系统服务 =====
+// ===== 文件系统服务（桌面版暂存实现） =====
+// 桌面版使用标准 node:fs 或 Electron dialog 来处理文件系统
 
 export async function listDirectory(dirPath: string): Promise<FileInfo[]> {
-  const dir = new Directory(dirPath);
-  const entries = dir.list();
-  const result: FileInfo[] = [];
-  for (const entry of entries) {
-    const isDir = entry instanceof Directory;
-    result.push({
-      name: entry.name,
-      path: entry.uri,
-      isDirectory: isDir,
-      size: entry instanceof File ? entry.size : 0,
-      modified: entry instanceof File ? (entry.lastModified ?? Date.now()) : Date.now(),
-    });
-  }
-  return result.sort((a, b) => {
-    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
+  // 桌面版暂不支持本地文件系统浏览
+  return [];
 }
 
 export async function readFile(filePath: string): Promise<string> {
-  const file = new File(filePath);
-  if (!file.exists) {
-    throw new Error('文件不存在');
-  }
-  return await file.text();
+  throw new Error('文件系统服务在桌面版暂不可用');
 }
 
 export async function writeFile(filePath: string, content: string): Promise<void> {
-  const file = new File(filePath);
-  if (!file.exists) {
-    file.create();
-  }
-  file.write(content);
+  throw new Error('文件系统服务在桌面版暂不可用');
 }
 
 export async function deleteFile(filePath: string): Promise<void> {
-  const file = new File(filePath);
-  file.delete();
+  throw new Error('文件系统服务在桌面版暂不可用');
 }
 
 export async function fileExists(filePath: string): Promise<boolean> {
-  const file = new File(filePath);
-  return file.exists;
+  return false;
 }
 
 export function getDocumentDirectory(): string {
-  return Paths.document.uri;
+  return '/';
 }

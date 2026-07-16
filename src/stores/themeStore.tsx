@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { darkColors, lightColors } from '../utils/constants';
 
 export type ThemeColors = typeof darkColors | typeof lightColors;
@@ -25,24 +24,28 @@ const THEME_KEY = 'theme_mode';
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>('dark');
 
-  // 启动时从存储加载
   React.useEffect(() => {
-    AsyncStorage.getItem(THEME_KEY).then((saved) => {
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
       if (saved === 'light' || saved === 'dark') {
         setModeState(saved);
       }
-    });
+    } catch {}
   }, []);
 
   const setMode = useCallback((newMode: ThemeMode) => {
     setModeState(newMode);
-    AsyncStorage.setItem(THEME_KEY, newMode);
+    try {
+      localStorage.setItem(THEME_KEY, newMode);
+    } catch {}
   }, []);
 
   const toggle = useCallback(() => {
     setModeState((prev) => {
       const next = prev === 'dark' ? 'light' : 'dark';
-      AsyncStorage.setItem(THEME_KEY, next);
+      try {
+        localStorage.setItem(THEME_KEY, next);
+      } catch {}
       return next;
     });
   }, []);

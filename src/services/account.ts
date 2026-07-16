@@ -1,9 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserAccount } from '../types';
 
 const ACCOUNT_KEY = 'user_account';
 
-// 简易哈希（SHA-256 不可用时的降级方案）
 function simpleHash(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -14,8 +12,24 @@ function simpleHash(str: string): string {
   return Math.abs(hash).toString(36);
 }
 
+function getStorage(): UserAccount | null {
+  try {
+    const raw = localStorage.getItem(ACCOUNT_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function setStorage(account: UserAccount): void {
+  localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
+}
+
+function removeStorage(): void {
+  localStorage.removeItem(ACCOUNT_KEY);
+}
+
 export async function register(email: string, password: string): Promise<UserAccount> {
-  const existing = await getAccount();
+  const existing = getStorage();
   if (existing) throw new Error('已注册账户');
 
   if (!email.includes('@') || password.length < 4) {
@@ -28,29 +42,25 @@ export async function register(email: string, password: string): Promise<UserAcc
     createdAt: Date.now(),
   };
 
-  await AsyncStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
+  setStorage(account);
   return account;
 }
 
 export async function login(email: string, password: string): Promise<UserAccount> {
-  const account = await getAccount();
+  const account = getStorage();
   if (!account) throw new Error('账户不存在，请先注册');
   if (account.passwordHash !== simpleHash(password)) throw new Error('密码错误');
   return account;
 }
 
 export async function getAccount(): Promise<UserAccount | null> {
-  try {
-    const raw = await AsyncStorage.getItem(ACCOUNT_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
+  return getStorage();
 }
 
 export async function isLoggedIn(): Promise<boolean> {
-  return (await getAccount()) !== null;
+  return getStorage() !== null;
 }
 
 export async function logout(): Promise<void> {
-  await AsyncStorage.removeItem(ACCOUNT_KEY);
+  removeStorage();
 }

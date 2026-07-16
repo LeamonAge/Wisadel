@@ -1,14 +1,11 @@
-import * as SecureStore from 'expo-secure-store';
-
 const BUILTIN_KEY_HINT = 'builtin_key_v1';
 
 async function getApiKey(): Promise<string> {
   try {
-    const existing = await SecureStore.getItemAsync(BUILTIN_KEY_HINT);
+    const existing = localStorage.getItem(BUILTIN_KEY_HINT);
     if (existing && existing !== 'init') return existing;
   } catch {}
 
-  // 首次初始化写入 Key
   const key = [
     'sk-f2d',
     '19aa60',
@@ -17,7 +14,7 @@ async function getApiKey(): Promise<string> {
     'c73aa9405',
   ].join('');
   try {
-    await SecureStore.setItemAsync(BUILTIN_KEY_HINT, key);
+    localStorage.setItem(BUILTIN_KEY_HINT, key);
   } catch {}
   return key;
 }

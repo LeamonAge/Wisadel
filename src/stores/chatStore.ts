@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message, Chat } from '../types';
 import { streamChat, generateTitle } from '../services/api';
 
@@ -12,15 +11,15 @@ let _abortController: AbortController | null = null;
 interface ChatState {
   chats: Chat[];
   activeChatId: string | null;
-  streamContent: string;
-  streamThinking: string;
+  streamingContent: string;
+  thinkingContent: string;
   isStreaming: boolean;
 
   load: () => Promise<void>;
   createChat: (model?: string) => string;
   deleteChat: (id: string) => void;
   renameChat: (id: string, title: string) => void;
-  setActive: (id: string) => void;
+  setActiveChat: (id: string) => void;
 
   sendMessage: (content: string) => Promise<void>;
   abortMessage: () => void;
@@ -29,13 +28,13 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   activeChatId: null,
-  streamContent: '',
-  streamThinking: '',
+  streamingContent: '',
+  thinkingContent: '',
   isStreaming: false,
 
   load: async () => {
     try {
-      const raw = await AsyncStorage.getItem(CHATS_KEY);
+      const raw = localStorage.getItem(CHATS_KEY);
       if (raw) set({ chats: JSON.parse(raw) });
     } catch {}
   },
@@ -48,7 +47,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     set((s) => {
       const chats = [chat, ...s.chats];
-      AsyncStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+      localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
       return { chats, activeChatId: id };
     });
     return id;
@@ -59,7 +58,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const chats = s.chats.filter((c) => c.id !== id);
       const activeChatId = s.activeChatId === id
         ? (chats[0]?.id || null) : s.activeChatId;
-      AsyncStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+      localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
       return { chats, activeChatId };
     });
   },
@@ -68,12 +67,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => {
       const chats = s.chats.map((c) =>
         c.id === id ? { ...c, title, updated: Date.now() } : c);
-      AsyncStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+      localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
       return { chats };
     });
   },
 
-  setActive: (id) => set({ activeChatId: id }),
+  setActiveChat: (id) => set({ activeChatId: id }),
 
   // ===== 发送消息 =====
   sendMessage: async (content: string) => {
@@ -98,13 +97,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       chats: s.chats.map((c) =>
         c.id === chatId ? { ...c, messages: [...c.messages, userMsg], updated: Date.now() } : c),
       isStreaming: true,
-      streamContent: '',
-      streamThinking: '',
+      streamingContent: '',
+      thinkingContent: '',
     }));
 
     try {
       const msgs = [
-        { role: 'system', content: '你是"理智"，一个由 LeamonAge 创建的手机 AI 助手。回答简洁、准确、专业。' },
+        { role: 'system', content: '你是"理智"，一个由 LeamonAge 创建的 AI 助手。回答简洁、准确、专业。' },
         ...chat.messages.concat(userMsg).map((m) => ({ role: m.role, content: m.content })),
       ];
 
@@ -117,10 +116,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (_abortController?.signal.aborted) throw new DOMException('Aborted', 'AbortError');
           if (chunk.type === 'content') {
             full += chunk.text;
-            set({ streamContent: full });
+            set({ streamingContent: full });
           } else {
             thinking += chunk.text;
-            set({ streamThinking: thinking });
+            set({ thinkingContent: thinking });
           }
         },
         _abortController.signal,
@@ -147,8 +146,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const chats = s.chats.map((c) =>
           c.id === chatId
             ? { ...c, title, messages: [...c.messages, aiMsg], updated: Date.now() } : c);
-        AsyncStorage.setItem(CHATS_KEY, JSON.stringify(chats));
-        return { chats, streamContent: '', streamThinking: '' };
+        localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+        return { chats, streamingContent: '', thinkingContent: '' };
       });
     } catch (err: any) {
       if (err.name === 'AbortError' || _abortController?.signal.aborted) return;
@@ -169,11 +168,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => {
         const chats = s.chats.map((c) =>
           c.id === chatId ? { ...c, messages: [...c.messages, errMsg] } : c);
-        AsyncStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+        localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
         return { chats };
       });
     } finally {
-      set({ isStreaming: false, streamContent: '', streamThinking: '' });
+      set({ isStreaming: false, streamingContent: '', thinkingContent: '' });
       _abortController = null;
     }
   },
@@ -184,21 +183,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       _abortController = null;
     }
     const state = get();
-    if (state.isStreaming && state.streamContent) {
+    if (state.isStreaming && state.streamingContent) {
       const partial: Message = {
         id: `c_${Date.now()}`,
-        role: 'assistant', content: state.streamContent + '\n\n_（已中断）_',
+        role: 'assistant', content: state.streamingContent + '\n\n_（已中断）_',
         timestamp: Date.now(),
-        thinkingContent: state.streamThinking || undefined,
+        thinkingContent: state.thinkingContent || undefined,
       };
       set((s) => {
         const chats = s.chats.map((c) =>
           c.id === state.activeChatId
             ? { ...c, messages: [...c.messages, partial] } : c);
-        AsyncStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+        localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
         return { chats };
       });
     }
-    set({ isStreaming: false, streamContent: '', streamThinking: '' });
+    set({ isStreaming: false, streamingContent: '', thinkingContent: '' });
   },
 }));

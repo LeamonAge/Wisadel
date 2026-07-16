@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { SanityState, Transaction } from '../types';
+import { SanityState } from '../types';
 import { getSanityState, consumeSanity, rechargeSanity } from '../services/sanity';
 
 interface SanityStore {

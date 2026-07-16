@@ -1,37 +1,87 @@
 {
-  "name": "san-app",
-  "version": "1.0.0",
-  "main": "index.ts",
+  "name": "wisadel",
+  "version": "0.1.10",
+  "main": "main.js",
   "dependencies": {
-    "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-navigation/native": "^7.3.8",
-    "@react-navigation/native-stack": "^7.17.10",
-    "expo": "~57.0.4",
-    "expo-secure-store": "~57.0.0",
-    "expo-status-bar": "~57.0.0",
-    "expo-brightness": "~57.0.0",
-    "expo-file-system": "~57.0.0",
-    "expo-intent-launcher": "~57.0.0",
-    "expo-sharing": "~57.0.3",
-    "expo-constants": "~57.0.3",
-    "react": "19.2.3",
-    "react-native": "0.86.0",
-    "react-native-gesture-handler": "~2.32.0",
-    "react-native-reanimated": "4.5.0",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "4.25.2",
-    "react-native-svg": "15.15.4",
+    "electron-updater": "^6.6.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "@types/react-dom": "^19.2.3",
+    "concurrently": "^9.2.4",
+    "cross-env": "^7.0.3",
+    "css-loader": "^7.1.4",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "html-webpack-plugin": "^5.6.7",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.6.2",
+    "typescript": "~6.0.3",
+    "wait-on": "^8.0.5",
+    "webpack": "^5.108.4",
+    "webpack-cli": "^6.0.1"
   },
   "scripts": {
+    "dev": "concurrently \"cross-env BROWSER=none expo start --web\" \"wait-on http://localhost:19006 && electron .\"",
+    "build:renderer": "webpack --mode production",
+    "build": "npm run build:renderer && electron-builder --win --config electron-builder.yml",
+    "release": "npm run build && electron-builder --win --config electron-builder.yml --publish always",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web"
+  },
+  "build": {
+    "appId": "com.sanity.app",
+    "productName": "理智",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "dist/**/*",
+      "assets/**/*",
+      "!node_modules/**/*",
+      "node_modules/electron-updater/**/*",
+      "node_modules/semver/**/*",
+      "node_modules/builder-util-runtime/**/*",
+      "node_modules/js-yaml/**/*",
+      "node_modules/argparse/**/*",
+      "node_modules/lodash.isequal/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "理智"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "LeamonAge",
+        "repo": "Wisadel",
+        "private": false
+      }
+    ]
   },
   "private": true
 }
