@@ -25,9 +25,7 @@ jobs:
         run: npm run build:renderer
 
       - name: Build and package
-        run: npm run build
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build -- --publish never
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
