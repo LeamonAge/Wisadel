@@ -1,142 +1,124 @@
-import { File, Directory, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as IntentLauncher from 'expo-intent-launcher';
-import { Platform, Alert } from 'react-native';
+/**
+ * Wisadel 自动更新服务
+ * 基于 electron-updater + GitHub Releases
+ * 打包方式：NSIS 安装包，支持增量更新
+ */
 
-// ===== GitHub Releases 更新服务 =====
-const GITHUB_REPO = 'sanity-app/sanity';
-const GITHUB_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+const { app, dialog, BrowserWindow } = require('@electron/remote');
+const { autoUpdater } = require('electron-updater');
 
-export interface UpdateInfo {
-  version: string;
-  downloadUrl: string;
-  releaseNotes: string;
-  publishedAt: string;
-  size: number;
+// ===== GitHub Releases 配置 =====
+const GITHUB_OWNER = 'LeamonAge';
+const GITHUB_REPO = 'Wisadel';
+const GITHUB_FEED_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`;
+
+// ===== 更新日志回调 =====
+export type UpdateStatusCallback = (status: UpdateStatus) => void;
+
+export interface UpdateStatus {
+  type: 'checking' | 'available' | 'downloading' | 'downloaded' | 'error' | 'not-available';
+  message?: string;
+  progress?: number; // 0-100
+  version?: string;
 }
 
-// 当前版本
-export function getCurrentVersion(): string {
-  try {
-    const Constants = require('expo-constants');
-    return Constants.default?.expoConfig?.version || '1.0.0';
-  } catch {
-    return '1.0.0';
-  }
-}
+let statusCallback: UpdateStatusCallback | null = null;
 
-// 比较版本号 (semver)
-function compareVersions(a: string, b: string): number {
-  const pa = a.replace(/[^0-9.]/g, '').split('.').map(Number);
-  const pb = b.replace(/[^0-9.]/g, '').split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const va = pa[i] || 0;
-    const vb = pb[i] || 0;
-    if (va > vb) return 1;
-    if (va < vb) return -1;
-  }
-  return 0;
-}
+// ===== 初始化 autoUpdater =====
+export function initAutoUpdater(callback?: UpdateStatusCallback) {
+  if (callback) statusCallback = callback;
 
-// 检查 GitHub Releases 最新版本
-export async function checkForUpdate(): Promise<UpdateInfo | null> {
-  try {
-    const response = await fetch(GITHUB_API, {
-      headers: {
-        Accept: 'application/vnd.github.v3+json',
-        // 无鉴权公开仓库可用；私仓需 token
-      },
-    });
-
-    if (!response.ok) {
-      // 403 通常是速率限制，静默返回无更新
-      if (response.status === 403) return null;
-      throw new Error(`GitHub API 错误 (${response.status})`);
-    }
-
-    const release = await response.json();
-    const tagName = release.tag_name?.replace(/^v/, '') || '0.0.0';
-
-    if (compareVersions(tagName, getCurrentVersion()) <= 0) return null;
-
-    const apkAsset = release.assets?.find(
-      (a: any) => a.name?.endsWith('.apk') && a.browser_download_url
-    );
-
-    if (!apkAsset) return null;
-
-    return {
-      version: tagName,
-      downloadUrl: apkAsset.browser_download_url,
-      releaseNotes: release.body || '暂无更新说明',
-      publishedAt: release.published_at,
-      size: apkAsset.size || 0,
-    };
-  } catch {
-    return null;
-  }
-}
-
-// 下载 APK 到 Documents 目录（而非 cache，避免被系统清理）
-export async function downloadUpdate(
-  updateInfo: UpdateInfo,
-  onProgress?: (progress: number) => void
-): Promise<string> {
-  const destDir = new Directory(Paths.document.uri);
-  const destFile = new File(destDir, `sanity_update_${updateInfo.version}.apk`);
-
-  // 如果已存在则删除
-  if (destFile.exists) {
-    destFile.delete();
-  }
-
-  const task = File.createDownloadTask(updateInfo.downloadUrl, destFile, {
-    onProgress: ({ bytesWritten, totalBytes }) => {
-      if (totalBytes > 0) {
-        onProgress?.(bytesWritten / totalBytes);
-      }
-    },
+  // 配置 GitHub 发布源
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: GITHUB_OWNER,
+    repo: GITHUB_REPO,
   });
 
-  const result = await task.downloadAsync();
-  if (!result || !result.uri) {
-    throw new Error('下载失败：未获取到文件');
-  }
-  return result.uri;
-}
+  // 是否允许预发布版本
+  autoUpdater.allowPrerelease = false;
+  // 自动下载更新包
+  autoUpdater.autoDownload = true;
 
-// 安装 APK
-// Android 上通过 Content Provider + Intent 安装（Android 7+ 需要 FileProvider）
-export async function installApk(fileUri: string): Promise<void> {
-  if (Platform.OS !== 'android') return;
+  // ---- 事件绑定 ----
+  autoUpdater.on('checking-for-update', () => {
+    emitStatus({ type: 'checking', message: '正在检查更新…' });
+  });
 
-  try {
-    // 方式 1：通过 Android 系统安装器 Intent（支持 FileProvider）
-    await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-      data: fileUri,
-      type: 'application/vnd.android.package-archive',
-      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+  autoUpdater.on('update-available', (info: any) => {
+    emitStatus({
+      type: 'available',
+      message: `发现新版本 v${info.version}`,
+      version: info.version,
     });
-  } catch {
-    // 方式 2：回退到系统分享面板
-    try {
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'application/vnd.android.package-archive',
-        dialogTitle: '安装更新',
+  });
+
+  autoUpdater.on('download-progress', (progressObj: any) => {
+    const percent = Math.round(progressObj.percent || 0);
+    emitStatus({
+      type: 'downloading',
+      message: `正在下载更新… ${percent}%`,
+      progress: percent,
+    });
+  });
+
+  autoUpdater.on('update-downloaded', async (info: any) => {
+    emitStatus({
+      type: 'downloaded',
+      message: `更新已就绪 (v${info.version})`,
+      version: info.version,
+    });
+
+    // 弹窗询问用户是否立即重启安装
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'info',
+        title: '更新就绪',
+        message: `Wisadel v${info.version} 已下载完成`,
+        detail: '是否立即重启以完成安装？',
+        buttons: ['立即重启', '稍后提醒'],
+        defaultId: 0,
+        cancelId: 1,
       });
-    } catch {
-      Alert.alert(
-        '安装提示',
-        `APK 已下载到内部存储。\n请前往文件管理器找到 sanity_update_${getCurrentVersion()}.apk 手动安装。`,
-        [{ text: '知道了' }]
-      );
+
+      if (response === 0) {
+        autoUpdater.quitAndInstall(false, true);
+      }
     }
+  });
+
+  autoUpdater.on('error', (err: Error) => {
+    emitStatus({
+      type: 'error',
+      message: `更新检查失败：${err.message}`,
+    });
+  });
+
+  return autoUpdater;
+}
+
+// ===== 手动检查更新 =====
+export function checkForUpdate(): void {
+  if (!autoUpdater) {
+    console.warn('[updater] autoUpdater 未初始化');
+    return;
+  }
+  autoUpdater.checkForUpdates().catch((err: Error) => {
+    console.error('[updater] 检查更新出错：', err.message);
+  });
+}
+
+// ===== 获取当前版本 =====
+export function getCurrentVersion(): string {
+  try {
+    return app.getVersion();
+  } catch {
+    return '0.0.0';
   }
 }
 
-// 格式化文件大小
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+// ===== 内部辅助 =====
+function emitStatus(status: UpdateStatus) {
+  statusCallback?.(status);
 }
