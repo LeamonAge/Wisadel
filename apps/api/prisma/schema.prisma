@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum SessionKind {
+  CHAT
+  IMAGE
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+enum ImageTaskStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id           String         @id @default(uuid()) @db.Uuid
+  email        String         @unique @db.VarChar(255)
+  passwordHash String         @map("password_hash") @db.VarChar(255)
+  nickname     String         @db.VarChar(50)
+  avatarUrl    String?        @map("avatar_url") @db.VarChar(1000)
+  role         UserRole       @default(USER)
+  disabledAt   DateTime?      @map("disabled_at") @db.Timestamptz(3)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sessions     ChatSession[]
+  refreshTokens RefreshToken[]
+  imageTasks   ImageTask[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(128)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+model ChatSession {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  kind      SessionKind
+  title     String      @default("新会话") @db.VarChar(100)
+  model     String      @db.VarChar(100)
+  deletedAt DateTime?   @map("deleted_at") @db.Timestamptz(3)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  imageTasks ImageTask[]
+
+  @@index([userId, kind, updatedAt(sort: Desc)])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid()) @db.Uuid
+  clientId  String      @map("client_id") @db.VarChar(100)
+  sessionId String      @map("session_id") @db.Uuid
+  role      MessageRole
+  content   String      @db.Text
+  metadata  Json?
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, clientId])
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+model ImageTask {
+  id           String          @id @default(uuid()) @db.Uuid
+  clientId     String          @map("client_id") @db.VarChar(100)
+  userId       String          @map("user_id") @db.Uuid
+  sessionId    String          @map("session_id") @db.Uuid
+  status       ImageTaskStatus @default(QUEUED)
+  progress     Int             @default(0)
+  params       Json
+  resultUrls   Json            @default("[]") @map("result_urls")
+  errorCode    String?         @map("error_code") @db.VarChar(100)
+  errorMessage String?         @map("error_message") @db.Text
+  retryOfId    String?         @map("retry_of_id") @db.Uuid
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session      ChatSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("image_tasks")
+}

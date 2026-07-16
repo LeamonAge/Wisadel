@@ -1,0 +1,38 @@
+{
+  "name": "wisadel",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Wisadel desktop AI conversation and image generation platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n API,DESKTOP,ADMIN -c cyan,magenta,yellow \"npm run dev -w @wisadel/api\" \"npm run dev -w @wisadel/desktop\" \"npm run dev -w @wisadel/admin\"",
+    "dev:api": "npm run dev -w @wisadel/api",
+    "dev:desktop": "npm run dev -w @wisadel/desktop",
+    "dev:admin": "npm run dev -w @wisadel/admin",
+    "build": "npm run build -w @wisadel/contracts && npm run build -w @wisadel/api && npm run build -w @wisadel/desktop && npm run build -w @wisadel/admin",
+    "test": "npm run test -w @wisadel/contracts && npm run test -w @wisadel/api && npm run test -w @wisadel/desktop",
+    "typecheck": "npm run build -w @wisadel/contracts && npm run typecheck -w @wisadel/api && npm run typecheck -w @wisadel/desktop && npm run typecheck -w @wisadel/admin",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "db:generate": "npm run db:generate -w @wisadel/api",
+    "db:migrate": "npm run db:migrate -w @wisadel/api"
+    ,"package:win": "npm run package:win -w @wisadel/desktop"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "concurrently": "^9.2.0",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}
