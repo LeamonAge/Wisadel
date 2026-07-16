@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAccountStore } from './src/stores/accountStore';
 import { useChatStore } from './src/stores/chatStore';
 import LoginScreen from './src/screens/LoginScreen';
@@ -95,9 +95,9 @@ export default function App() {
     <>
       <style>{globalStyles}</style>
       <ThemeProvider>
-        <BrowserRouter>
+        <HashRouter>
           <AppContent />
-        </BrowserRouter>
+        </HashRouter>
       </ThemeProvider>
     </>
   );
