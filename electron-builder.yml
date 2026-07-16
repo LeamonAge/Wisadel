@@ -9,13 +9,6 @@ files:
   - preload.js
   - dist/**/*
   - assets/**/*
-  - "!node_modules/**/*"
-  - node_modules/electron-updater/**/*
-  - node_modules/semver/**/*
-  - node_modules/builder-util-runtime/**/*
-  - node_modules/js-yaml/**/*
-  - node_modules/argparse/**/*
-  - node_modules/lodash.isequal/**/*
 win:
   target:
     - target: nsis
