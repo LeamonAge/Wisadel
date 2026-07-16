@@ -23,6 +23,7 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Wisadel
+  artifactName: "Wisadel-${version}-x64.${ext}"
 publish:
   - provider: github
     owner: LeamonAge

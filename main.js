@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 
@@ -12,9 +12,54 @@ autoUpdater.setFeedURL({
   repo: GITHUB_REPO,
 });
 autoUpdater.allowPrerelease = false;
-autoUpdater.autoDownload = true;
+autoUpdater.autoDownload = false;
 
 let mainWindow = null;
+let automaticUpdatePromptShown = false;
+
+function downloadAndPromptToInstall() {
+  const onError = (error) => {
+    dialog.showErrorBox('更新下载失败', error?.message || '请检查网络后重试。');
+  };
+
+  autoUpdater.once('error', onError);
+  autoUpdater.once('update-downloaded', async () => {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '更新已准备就绪',
+      message: '新版本已下载完成，是否现在重启并安装？',
+      buttons: ['立即安装', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) autoUpdater.quitAndInstall(false, true);
+  });
+
+  autoUpdater.downloadUpdate().catch(onError);
+}
+
+function checkForUpdatesOnStartup() {
+  autoUpdater.once('update-available', async (info) => {
+    if (automaticUpdatePromptShown || !mainWindow) return;
+    automaticUpdatePromptShown = true;
+
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '发现新版本',
+      message: `Wisadel ${info.version} 已发布`,
+      detail: '是否立即下载更新？',
+      buttons: ['立即下载', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+
+    if (response === 0) downloadAndPromptToInstall();
+  });
+
+  autoUpdater.checkForUpdates().catch(() => {
+    // 启动检查失败时静默处理，用户仍可在设置中手动重试。
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -44,6 +89,7 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    setTimeout(checkForUpdatesOnStartup, 1500);
   });
 
   mainWindow.on('closed', () => {
