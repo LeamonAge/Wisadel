@@ -32,6 +32,7 @@ export default function ChatScreen() {
   const thinkingContent = useChatStore((s) => s.thinkingContent);
   const streamingContent = useChatStore((s) => s.streamingContent);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const cancelMessage = useChatStore((s) => s.cancelMessage);
   const createChat = useChatStore((s) => s.createChat);
   const deleteChat = useChatStore((s) => s.deleteChat);
   const renameChat = useChatStore((s) => s.renameChat);
@@ -261,7 +262,9 @@ export default function ChatScreen() {
         value={inputText}
         onChangeText={setInputText}
         onSend={handleSend}
+        onCancel={cancelMessage}
         disabled={isStreaming}
+        isStreaming={isStreaming}
       />
     </SafeAreaView>
   );

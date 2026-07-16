@@ -4,7 +4,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform, Alert } from 'react-native';
 
 // ===== GitHub Releases 更新服务 =====
-const GITHUB_REPO = 'LeamonAge/sanity';
+const GITHUB_REPO = 'sanity-app/sanity';
 const GITHUB_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
 export interface UpdateInfo {
@@ -42,10 +42,17 @@ function compareVersions(a: string, b: string): number {
 export async function checkForUpdate(): Promise<UpdateInfo | null> {
   try {
     const response = await fetch(GITHUB_API, {
-      headers: { Accept: 'application/vnd.github.v3+json' },
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        // 无鉴权公开仓库可用；私仓需 token
+      },
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // 403 通常是速率限制，静默返回无更新
+      if (response.status === 403) return null;
+      throw new Error(`GitHub API 错误 (${response.status})`);
+    }
 
     const release = await response.json();
     const tagName = release.tag_name?.replace(/^v/, '') || '0.0.0';
@@ -70,12 +77,12 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
   }
 }
 
-// 下载 APK（使用 File.downloadFileAsync）
+// 下载 APK 到 Documents 目录（而非 cache，避免被系统清理）
 export async function downloadUpdate(
   updateInfo: UpdateInfo,
   onProgress?: (progress: number) => void
 ): Promise<string> {
-  const destDir = new Directory(Paths.cache.uri);
+  const destDir = new Directory(Paths.document.uri);
   const destFile = new File(destDir, `sanity_update_${updateInfo.version}.apk`);
 
   // 如果已存在则删除
@@ -99,22 +106,30 @@ export async function downloadUpdate(
 }
 
 // 安装 APK
+// Android 上通过 Content Provider + Intent 安装（Android 7+ 需要 FileProvider）
 export async function installApk(fileUri: string): Promise<void> {
   if (Platform.OS !== 'android') return;
 
   try {
-    await Sharing.shareAsync(fileUri, {
-      mimeType: 'application/vnd.android.package-archive',
-      dialogTitle: '安装更新',
+    // 方式 1：通过 Android 系统安装器 Intent（支持 FileProvider）
+    await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+      data: fileUri,
+      type: 'application/vnd.android.package-archive',
+      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
     });
   } catch {
+    // 方式 2：回退到系统分享面板
     try {
-      await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
-        data: fileUri,
-        type: 'application/vnd.android.package-archive',
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'application/vnd.android.package-archive',
+        dialogTitle: '安装更新',
       });
     } catch {
-      Alert.alert('安装提示', '请前往文件管理器找到下载的 APK 手动安装。', [{ text: '知道了' }]);
+      Alert.alert(
+        '安装提示',
+        `APK 已下载到内部存储。\n请前往文件管理器找到 sanity_update_${getCurrentVersion()}.apk 手动安装。`,
+        [{ text: '知道了' }]
+      );
     }
   }
 }

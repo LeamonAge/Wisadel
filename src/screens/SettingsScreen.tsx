@@ -36,9 +36,16 @@ export default function SettingsScreen() {
 
   const loadSources = async () => {
     setLoading(true);
-    const s = await getApiSources();
-    setSources(s);
-    setLoading(false);
+    try {
+      const s = await getApiSources();
+      setSources(s);
+    } catch (err: any) {
+      console.warn('加载 API 源失败:', err?.message);
+      // SecureStore 未就绪时使用空列表，不崩溃
+      setSources([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveApiKey = async (sourceId: string, key: string) => {
@@ -48,12 +55,16 @@ export default function SettingsScreen() {
   };
 
   const handleToggleApi = async (sourceId: string) => {
-    const updated = sources.map((s) => ({
-      ...s,
-      enabled: s.id === sourceId ? !s.enabled : false,
-    }));
-    await saveApiSources(updated);
-    setSources(updated);
+    try {
+      const updated = sources.map((s) => ({
+        ...s,
+        enabled: s.id === sourceId ? !s.enabled : false,
+      }));
+      await saveApiSources(updated);
+      setSources(updated);
+    } catch (err: any) {
+      Alert.alert('错误', '保存失败: ' + (err?.message || '未知错误'));
+    }
   };
 
   // ===== 更新检查 =====
