@@ -1,6 +1,6 @@
 {
   "name": "@wisadel/desktop",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
@@ -44,6 +44,9 @@
       "dist-electron/**/*",
       "resources/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      { "from": "resources/Wisadel.ico", "to": "Wisadel.ico" }
     ],
     "win": {
       "target": ["nsis"],

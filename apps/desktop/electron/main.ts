@@ -1,9 +1,30 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 
 let mainWindow: BrowserWindow | null = null;
 let lastUpdateEvent: object | null = null;
+let tray: Tray | null = null;
+let quitting = false;
+
+const showWindow = () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+};
+
+const createTray = () => {
+  const icon = nativeImage.createFromPath(path.join(process.resourcesPath, 'Wisadel.ico'));
+  tray = new Tray(icon);
+  tray.setToolTip('Wisadel');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开 Wisadel', click: showWindow },
+    { type: 'separator' },
+    { label: '退出', click: () => { quitting = true; app.quit(); } }
+  ]));
+  tray.on('click', showWindow);
+};
 
 const sendUpdate = (payload: object) => {
   lastUpdateEvent = payload;
@@ -42,6 +63,11 @@ const createWindow = () => {
   mainWindow.webContents.once('did-finish-load', () => {
     if (lastUpdateEvent) setTimeout(() => mainWindow?.webContents.send('wisadel:update', lastUpdateEvent!), 500);
   });
+  mainWindow.on('close', (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    mainWindow?.hide();
+  });
 
   if (!app.isPackaged) void mainWindow.loadURL('http://localhost:5173');
   else void mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
@@ -51,10 +77,13 @@ app.whenReady().then(() => {
   ipcMain.handle('wisadel:update:download', () => autoUpdater.downloadUpdate());
   ipcMain.handle('wisadel:update:install', () => autoUpdater.quitAndInstall(false, true));
   createWindow();
+  createTray();
   configureAutoUpdate();
-  app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());
+  app.on('activate', showWindow);
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // The application remains available from the system tray.
 });
+
+app.on('before-quit', () => { quitting = true; });

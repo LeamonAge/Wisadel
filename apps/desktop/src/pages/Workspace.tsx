@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   Blocks, Bot, ChevronDown, CircleUserRound, CloudOff, Download, Ellipsis, Eye, Image as ImageIcon,
   FileText, ImagePlus, Layers3, LogOut, MessageSquare, PanelLeftClose, Paperclip, Pencil, Plus, RotateCcw,
@@ -23,6 +23,37 @@ export function Workspace({ onLogout }: { onLogout: () => void }) {
   const online = useAppStore((state) => state.online);
   const setPage = useAppStore((state) => state.setPage);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
+  const [imagePanelWidth, setImagePanelWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('wisadel.imagePanelWidth'));
+    return Number.isFinite(saved) && saved >= 280 && saved <= 620 ? saved : 330;
+  });
+  const resizingRef = useRef(false);
+
+  useEffect(() => {
+    const resize = (event: PointerEvent) => {
+      if (!resizingRef.current) return;
+      const maxWidth = Math.min(620, Math.max(280, window.innerWidth - 62 - 250 - 390));
+      const width = Math.min(maxWidth, Math.max(280, window.innerWidth - event.clientX));
+      setImagePanelWidth(width);
+    };
+    const stopResize = () => { resizingRef.current = false; document.body.classList.remove('is-resizing'); };
+    window.addEventListener('pointermove', resize);
+    window.addEventListener('pointerup', stopResize);
+    return () => {
+      window.removeEventListener('pointermove', resize);
+      window.removeEventListener('pointerup', stopResize);
+    };
+  }, []);
+
+  useEffect(() => { localStorage.setItem('wisadel.imagePanelWidth', String(imagePanelWidth)); }, [imagePanelWidth]);
+
+  const beginImagePanelResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (page !== 'image') return;
+    event.preventDefault();
+    resizingRef.current = true;
+    document.body.classList.add('is-resizing');
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
   return (
     <main className="app-shell">
@@ -31,7 +62,7 @@ export function Workspace({ onLogout }: { onLogout: () => void }) {
         <div className="titlebar-center"><span className="status-dot" />Wisadel Preview</div>
         <div className="titlebar-actions">{!online && <span className="offline-badge"><CloudOff size={14} />离线</span>}<button className="icon-button" onClick={onLogout} title="退出登录"><LogOut size={17} /></button></div>
       </header>
-      <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''}`}>
+      <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
         <nav className="rail">
           <div className="rail-logo"><Sparkles size={21} /></div>
           <div className="rail-group">
@@ -41,6 +72,7 @@ export function Workspace({ onLogout }: { onLogout: () => void }) {
         </nav>
         {(page === 'chat' || page === 'image') && <SessionSidebar />}
         {(page === 'chat' || page === 'image') ? <Conversation /> : <PlaceholderPage page={page} />}
+        {page === 'image' && <div className="image-panel-resizer" role="separator" aria-label="调整 Stable Diffusion 面板宽度" aria-orientation="vertical" onPointerDown={beginImagePanelResize}><span /></div>}
         {page === 'image' && <ImageInspector />}
       </div>
       <SettingsDialog />

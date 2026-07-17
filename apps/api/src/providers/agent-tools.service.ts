@@ -7,7 +7,7 @@ type ToolCall = { name: string; arguments: string };
 
 const TEXT_EXTENSIONS = new Set([
   '.txt', '.md', '.json', '.jsonc', '.yaml', '.yml', '.toml', '.xml', '.html', '.css', '.scss',
-  '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.vue', '.svelte', '.py', '.java', '.go', '.rs',
+  '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.vue', '.svelte', '.py', '.java', '.go', '.rs','.ab',
   '.c', '.h', '.cpp', '.hpp', '.cs', '.php', '.rb', '.sh', '.ps1', '.sql', '.prisma', '.graphql'
 ]);
 const BLOCKED_NAMES = /(^|[\\/])(\.env(?:\..*)?|\.npmrc|\.pypirc|id_rsa|id_ed25519|credentials|secrets?)([\\/]|$)/i;
