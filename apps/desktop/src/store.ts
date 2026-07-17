@@ -31,9 +31,11 @@ const withSdDefaults = (params: Partial<SdParams>): SdParams => ({
 });
 
 type Page = SessionKind | 'models' | 'extensions' | 'plugins';
+type Theme = 'dark' | 'light';
 
 interface AppState {
   user: User | null;
+  theme: Theme;
   page: Page;
   online: boolean;
   sessions: Session[];
@@ -57,6 +59,7 @@ interface AppState {
   uploadingImage: boolean;
   uploadingFile: boolean;
   setUser: (user: User | null) => void;
+  setTheme: (theme: Theme) => void;
   setPage: (page: Page) => Promise<void>;
   loadSessions: (kind?: SessionKind) => Promise<void>;
   createSession: () => Promise<void>;
@@ -95,6 +98,7 @@ const stopImagePoll = () => {
 
 export const useAppStore = create<AppState>((set, get) => ({
   user: null,
+  theme: (localStorage.getItem('wisadel.theme') as Theme | null) ?? 'dark',
   page: 'chat',
   online: navigator.onLine,
   sessions: [],
@@ -135,6 +139,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     pendingAttachments: [],
     uploadingImage: false
   }),
+  setTheme: (theme) => {
+    localStorage.setItem('wisadel.theme', theme);
+    set({ theme });
+  },
   setPage: async (page) => {
     if (page === get().page) return;
     stopImagePoll();

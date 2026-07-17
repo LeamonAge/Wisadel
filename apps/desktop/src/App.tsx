@@ -9,6 +9,7 @@ export function App() {
   const user = useAppStore((state) => state.user);
   const setUser = useAppStore((state) => state.setUser);
   const loadSessions = useAppStore((state) => state.loadSessions);
+  const theme = useAppStore((state) => state.theme);
   const [restoring, setRestoring] = useState(true);
 
   useEffect(() => {
@@ -41,6 +42,10 @@ export function App() {
       window.removeEventListener(AUTH_EXPIRED_EVENT, expire);
     };
   }, [loadSessions, setUser]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   const authenticate = (result: AuthResponse) => {
     api.setTokens(result.accessToken, result.refreshToken);
