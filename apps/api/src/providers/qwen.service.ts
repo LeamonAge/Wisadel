@@ -10,11 +10,12 @@ export class QwenService {
 
   async extract(userText: string, current: SdParams, imageUrls: string[] = [], capabilities?: SdCapabilities): Promise<ImageAgentAction> {
     if ((process.env.AI_MODE ?? 'mock') === 'mock' || !this.configured) return this.fallback(userText, current);
+    const reference = await this.lookupReference(userText);
     const visionSources = await Promise.all(imageUrls.slice(0, 4).map((url) => this.images.toVisionSource(url)));
     const userContent = visionSources.length ? [
-      { type: 'text', text: userText },
+      { type: 'text', text: `${userText}${reference ? `\n\n公开资料摘要（用于识别角色/作品，需在回复中说明已参考）：\n${reference}` : ''}` },
       ...visionSources.map((url) => ({ type: 'image_url', image_url: { url } }))
-    ] : userText;
+    ] : `${userText}${reference ? `\n\n公开资料摘要（用于识别角色/作品，需在回复中说明已参考）：\n${reference}` : ''}`;
     const response = await fetch(`${process.env.QWEN_BASE_URL!.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.QWEN_API_KEY}`, 'Content-Type': 'application/json' },
@@ -23,7 +24,7 @@ export class QwenService {
         temperature: 0.2,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: `你是 Wisadel 的 Stable Diffusion 控制代理。你负责理解需求、分析上传图像、选择服务器真实存在的模型/采样器/调度器/VAE/LoRA/脚本、修正尺寸与参数，并决定更新参数或直接提交生成。绝不能编造能力清单中不存在的组件；没有可用 LoRA、VAE 或脚本时保持对应字段为空。prompt 必须是经过重写的、适合当前动漫 checkpoint 的英文 Stable Diffusion 标签或短语，按主体、外观、姿态、构图、环境、光线、风格、质量排序；禁止把用户中文原话直接复制到 prompt，禁止声称“已优化”却不改写。negativePrompt 也应提供针对性的英文缺陷词。LoRA 使用结构 {name,weight}，通常权重 0.6-1.0。只有能力清单列出的脚本才能写入 scriptName，除非已知参数结构否则 scriptArgs=[]。用户明确说“立即生成、直接生成、不用确认、帮我生成”时 action=generate 且 requiresConfirmation=false；其他创作请求 action=update_params 且 requiresConfirmation=true。收到图片时，应结合图片内容和用户文字分析主体、构图、风格、光线及可改进之处。公共人物、历史人物等合法普通创作不得仅因人物身份拒绝。若供应商政策不允许处理某项内容，必须 action=reply_only、params={} 并如实简短说明，不能输出伪造或原样复制的 prompt。reasoningSummary 用 1-3 句自然中文说明你如何理解主体、构图、风格和参数取舍，不得使用固定编号模板，也不要输出隐藏思维链。只能返回 JSON：{"reply":string,"reasoningSummary":string,"action":"reply_only"|"update_params"|"generate","params":object,"requiresConfirmation":boolean}。可用字段：mode,prompt,negativePrompt,samplerName,schedulerName,steps,width,height,cfgScale,seed,batchSize,denoisingStrength,maskBlur,modelCheckpoint,vaeName,loras,scriptName,scriptArgs。当前参数：${JSON.stringify(current)}。实时 SD 能力：${JSON.stringify(capabilities ?? null)}` },
+          { role: 'system', content: `你是 Wisadel 的高级视觉、检索与 Stable Diffusion 控制代理。应充分使用当前已配置千问模型可用的最高能力：仔细识别上传图像中的主体、服装、姿态、镜头、文字和风格；遇到不确定的角色、作品、游戏、动画或漫画时，优先依据提供的 Bilibili 公开资料摘要识别；短视频相关内容优先依据抖音公开资料摘要。你负责理解需求、分析上传图像、选择服务器真实存在的模型/采样器/调度器/VAE/LoRA/脚本、修正尺寸与参数，并决定更新参数或直接提交生成。绝不能编造能力清单中不存在的组件；没有可用 LoRA、VAE 或脚本时保持对应字段为空。prompt 必须是经过重写的、适合当前动漫 checkpoint 的英文 Stable Diffusion 标签或短语，按主体、外观、姿态、构图、环境、光线、风格、质量排序；禁止把用户中文原话直接复制到 prompt，禁止声称“已优化”却不改写。negativePrompt 也应提供针对性的英文缺陷词。LoRA 使用结构 {name,weight}，通常权重 0.6-1.0。只有能力清单列出的脚本才能写入 scriptName，除非已知参数结构否则 scriptArgs=[]。用户明确说“立即生成、直接生成、不用确认、帮我生成”时 action=generate 且 requiresConfirmation=false；其他创作请求 action=update_params 且 requiresConfirmation=true。收到图片时，应结合图片内容和用户文字分析主体、构图、风格、光线及可改进之处。公共人物、历史人物等合法普通创作不得仅因人物身份拒绝。若供应商政策不允许处理某项内容，必须 action=reply_only、params={} 并如实简短说明，不能输出伪造或原样复制的 prompt。reasoningSummary 用 1-3 句自然中文说明实际完成的识图、资料检索、主体/构图/风格判断与参数取舍，不得使用固定编号模板，也不要输出隐藏思维链。只能返回 JSON：{"reply":string,"reasoningSummary":string,"action":"reply_only"|"update_params"|"generate","params":object,"requiresConfirmation":boolean}。可用字段：mode,prompt,negativePrompt,samplerName,schedulerName,steps,width,height,cfgScale,seed,batchSize,denoisingStrength,maskBlur,modelCheckpoint,vaeName,loras,scriptName,scriptArgs。当前参数：${JSON.stringify(current)}。实时 SD 能力：${JSON.stringify(capabilities ?? null)}` },
           { role: 'user', content: userContent }
         ]
       })
@@ -41,6 +42,18 @@ export class QwenService {
         action: action.action === 'generate' && action.requiresConfirmation ? 'update_params' : action.action
       };
     } catch { return this.compileFallback(userText, current, capabilities); }
+  }
+
+  private async lookupReference(userText: string) {
+    if (!/(游戏|动画|动漫|漫画|角色|番剧|声优|小说|设定|galgame|二次元|抖音|短视频|直播|网红)/i.test(userText)) return '';
+    const source = /抖音|短视频|直播|网红/i.test(userText) ? 'site:douyin.com' : 'site:bilibili.com';
+    try {
+      const response = await fetch(`https://www.bing.com/search?q=${encodeURIComponent(`${source} ${userText}`)}`, { signal: AbortSignal.timeout(15_000), headers: { 'User-Agent': 'Mozilla/5.0 Wisadel/0.2' } });
+      if (!response.ok) return '';
+      const html = await response.text();
+      return [...html.matchAll(/<li class="b_algo"[\s\S]*?<h2><a[^>]*>([\s\S]*?)<\/a><\/h2>[\s\S]*?<p>([\s\S]*?)<\/p>/gi)]
+        .slice(0, 3).map((match) => `${(match[1] ?? '').replace(/<[^>]+>/g, '').trim()}：${(match[2] ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()}`).join('\n');
+    } catch { return ''; }
   }
 
   async repairSdError(error: string, current: SdParams, capabilities: SdCapabilities): Promise<Partial<SdParams> | null> {

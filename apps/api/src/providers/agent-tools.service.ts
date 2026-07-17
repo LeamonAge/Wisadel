@@ -57,7 +57,11 @@ export class AgentToolsService {
     }, ['url', 'destination']),
     this.tool('fetch_web_page', '访问公开的 HTTP/HTTPS 网页并读取其文本内容。', {
       url: { type: 'string', description: '完整的 http 或 https URL' }
-    }, ['url'])
+    }, ['url']),
+    this.tool('search_web', '检索公开网页资料。游戏、动画、漫画、角色设定优先检索 Bilibili；短视频热点优先检索抖音；其他内容使用通用公开网页搜索。返回可核查的标题、摘要和链接。', {
+      query: { type: 'string', description: '要检索的关键词或问题' },
+      source: { type: 'string', enum: ['auto', 'bilibili', 'douyin', 'web'], description: '检索来源偏好，默认 auto' }
+    }, ['query'])
   ];
 
   get workspaceRoot() { return resolve(process.env.AGENT_WORKSPACE_ROOT ?? process.cwd()); }
@@ -76,6 +80,7 @@ export class AgentToolsService {
       case 'run_command': return this.runCommand(this.string(args.program), Array.isArray(args.args) ? args.args.map(String) : [], this.string(args.cwd, '.'), this.number(args.timeoutSeconds, 120));
       case 'download_file': return this.downloadFile(this.string(args.url), this.string(args.destination));
       case 'fetch_web_page': return this.fetchWebPage(this.string(args.url));
+      case 'search_web': return this.searchWeb(this.string(args.query), this.string(args.source, 'auto'));
       default: throw new BadRequestException(`未知工具：${call.name}`);
     }
   }
@@ -255,6 +260,26 @@ export class AgentToolsService {
     if (!type.includes('text/') && !type.includes('json')) throw new BadRequestException('网页不是可读取的文本内容');
     const raw = (await response.text()).slice(0, 300_000);
     return raw.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30_000);
+  }
+
+  private async searchWeb(query: string, source: string) {
+    if (!query || query.length > 300) throw new BadRequestException('检索关键词无效');
+    const preference = source === 'auto'
+      ? /游戏|动画|动漫|漫画|角色|番剧|声优|小说|设定|galgame|二次元/i.test(query) ? 'bilibili'
+        : /抖音|短视频|热搜|热点|直播|网红/i.test(query) ? 'douyin' : 'web'
+      : source;
+    const scoped = preference === 'bilibili' ? `site:bilibili.com ${query}`
+      : preference === 'douyin' ? `site:douyin.com ${query}` : query;
+    const url = `https://www.bing.com/search?q=${encodeURIComponent(scoped)}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { 'User-Agent': 'Mozilla/5.0 Wisadel/0.2' } });
+    if (!response.ok) throw new BadRequestException(`公开检索失败 (${response.status})`);
+    const html = await response.text();
+    const items = [...html.matchAll(/<li class="b_algo"[\s\S]*?<h2><a href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h2>[\s\S]*?<p>([\s\S]*?)<\/p>/gi)]
+      .slice(0, 5)
+      .map((match) => ({ url: match[1] ?? '', title: (match[2] ?? '').replace(/<[^>]+>/g, '').replace(/&[^;]+;/g, ' ').trim(), summary: (match[3] ?? '').replace(/<[^>]+>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, ' ').trim() }))
+      .filter((item) => item.title && item.url);
+    if (!items.length) return `未检索到可引用的公开结果（来源偏好：${preference}）。`;
+    return [`公开检索完成（来源偏好：${preference}）`, ...items.map((item, index) => `${index + 1}. ${item.title}\n${item.summary}\n${item.url}`)].join('\n\n');
   }
 
   private safePath(path: string, blockSecrets = false) {

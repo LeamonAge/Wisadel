@@ -153,7 +153,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     const cached = conversational(page) ? conversationCache[page] : undefined;
     const targetSessionId = cached?.activeSessionId ?? null;
-    set({ page, sessions: cached?.sessions ?? [], activeSessionId: targetSessionId, messages: cached?.messages ?? [], imageTask: cached?.imageTask ?? null, imageTasks: cached?.imageTasks ?? [], ...(cached ? { sdParams: cached.sdParams } : {}), reasoningSteps: [], reasoningCollapsed: true, streamingText: '', sending: Boolean(targetSessionId && inFlightSessions.has(targetSessionId)), loadingConversation: conversational(page) && !cached, imageError: null, pendingImageUrls: [], pendingAttachments: [], sendError: null });
+    set({ page, sessions: cached?.sessions ?? [], activeSessionId: targetSessionId, messages: cached?.messages ?? [], imageTask: cached?.imageTask ?? null, imageTasks: cached?.imageTasks ?? [], ...(cached ? { sdParams: cached.sdParams, reasoningSteps: cached.reasoningSteps } : { reasoningSteps: [] }), reasoningCollapsed: true, streamingText: '', sending: Boolean(targetSessionId && inFlightSessions.has(targetSessionId)), loadingConversation: conversational(page) && !cached, imageError: null, pendingImageUrls: [], pendingAttachments: [], sendError: null });
     if (conversational(page)) await Promise.all([
       get().loadSessions(page),
       ...(page === 'image' ? [get().loadSdCapabilities()] : [])
@@ -187,7 +187,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectSession: async (id) => {
     stopImagePoll();
     const keepVisible = get().activeSessionId === id && get().messages.length > 0;
-    set({ activeSessionId: id, ...(keepVisible ? {} : { messages: [] }), streamingText: '', reasoningSteps: [], reasoningCollapsed: true, sending: inFlightSessions.has(id), imageTask: null, imageTasks: [], imageError: null, loadingConversation: !keepVisible });
+    const keepReasoning = keepVisible && get().reasoningSteps.length > 0;
+    set({ activeSessionId: id, ...(keepVisible ? {} : { messages: [] }), streamingText: '', ...(keepReasoning ? {} : { reasoningSteps: [] }), reasoningCollapsed: true, sending: inFlightSessions.has(id), imageTask: null, imageTasks: [], imageError: null, loadingConversation: !keepVisible });
     try {
       const imageSession = get().sessions.find((session) => session.id === id)?.kind === 'image';
       const [messages, imageTasks] = await Promise.all([
