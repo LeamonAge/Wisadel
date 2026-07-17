@@ -36,6 +36,7 @@ type Theme = 'dark' | 'light';
 interface AppState {
   user: User | null;
   theme: Theme;
+  autoGenerate: boolean;
   page: Page;
   online: boolean;
   sessions: Session[];
@@ -60,6 +61,7 @@ interface AppState {
   uploadingFile: boolean;
   setUser: (user: User | null) => void;
   setTheme: (theme: Theme) => void;
+  setAutoGenerate: (enabled: boolean) => void;
   setPage: (page: Page) => Promise<void>;
   loadSessions: (kind?: SessionKind) => Promise<void>;
   createSession: () => Promise<void>;
@@ -99,6 +101,7 @@ const stopImagePoll = () => {
 export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   theme: (localStorage.getItem('wisadel.theme') as Theme | null) ?? 'dark',
+  autoGenerate: localStorage.getItem('wisadel.autoGenerate') === 'true',
   page: 'chat',
   online: navigator.onLine,
   sessions: [],
@@ -142,6 +145,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTheme: (theme) => {
     localStorage.setItem('wisadel.theme', theme);
     set({ theme });
+  },
+  setAutoGenerate: (autoGenerate) => {
+    localStorage.setItem('wisadel.autoGenerate', String(autoGenerate));
+    set({ autoGenerate });
   },
   setPage: async (page) => {
     if (page === get().page) return;
