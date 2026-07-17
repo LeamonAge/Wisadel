@@ -11,6 +11,7 @@ export function App() {
   const loadSessions = useAppStore((state) => state.loadSessions);
   const theme = useAppStore((state) => state.theme);
   const [restoring, setRestoring] = useState(true);
+  const [update, setUpdate] = useState<{ type: string; version?: string; notes?: string; percent?: number; message?: string } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -47,6 +48,8 @@ export function App() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
+  useEffect(() => window.wisadelUpdater?.onEvent(setUpdate), []);
+
   const authenticate = (result: AuthResponse) => {
     api.setTokens(result.accessToken, result.refreshToken);
     localStorage.setItem('wisadel.user', JSON.stringify(result.user));
@@ -60,7 +63,14 @@ export function App() {
     setUser(null);
   };
 
-  if (restoring) return <div className="splash">Wisadel</div>;
-  if (!user) return <LoginPage onAuthenticated={authenticate} />;
-  return <Workspace onLogout={logout} />;
+  const content = restoring ? <div className="splash">Wisadel</div> : !user ? <LoginPage onAuthenticated={authenticate} /> : <Workspace onLogout={logout} />;
+  return <>{content}{update && <UpdateDialog update={update} onClose={() => setUpdate(null)} />}</>;
+}
+
+function UpdateDialog({ update, onClose }: { update: { type: string; version?: string; notes?: string; percent?: number; message?: string }; onClose: () => void }) {
+  const downloading = update.type === 'progress';
+  const downloaded = update.type === 'downloaded';
+  const title = downloaded ? '更新已准备就绪' : downloading ? '正在下载更新' : update.type === 'error' ? '更新下载失败' : '发现 Wisadel 新版本';
+  const notes = String(update.notes || '本次更新包含稳定性优化、功能改进与体验修复。').replace(/<[^>]*>/g, '').slice(0, 800);
+  return <div className="update-backdrop"><section className="update-dialog"><div className="update-mark">W</div><span className="update-kicker">WISADEL UPDATE</span><h2>{title}</h2><p>{downloaded ? `v${update.version ?? ''} 已下载完成，重启后将进入品牌化安装流程。` : downloading ? `正在下载 v${update.version ?? ''}，请保持应用开启。` : update.type === 'error' ? (update.message ?? '请稍后重试。') : `v${update.version ?? ''} 已发布。`}</p>{(downloading || downloaded) && <div className="update-progress"><i style={{ width: `${downloaded ? 100 : Math.max(1, update.percent ?? 0)}%` }} /><span>{Math.round(downloaded ? 100 : update.percent ?? 0)}%</span></div>}<div className="update-notes"><strong>本次更新</strong><div>{notes}</div></div><footer>{downloaded ? <button className="update-primary" onClick={() => void window.wisadelUpdater?.install()}>重启并安装</button> : downloading ? <button className="update-muted" disabled>下载中</button> : <><button className="update-muted" onClick={onClose}>稍后提醒</button><button className="update-primary" onClick={() => void window.wisadelUpdater?.download()}>立即下载</button></>}</footer></section></div>;
 }
