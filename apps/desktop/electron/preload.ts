@@ -9,3 +9,7 @@ contextBridge.exposeInMainWorld('wisadelUpdater', {
     return () => ipcRenderer.removeListener('wisadel:update', listener);
   }
 });
+
+contextBridge.exposeInMainWorld('wisadelDesktop', {
+  openImageStudio: () => ipcRenderer.invoke('wisadel:open-image-studio')
+});

@@ -9,7 +9,9 @@ export function App() {
   const user = useAppStore((state) => state.user);
   const setUser = useAppStore((state) => state.setUser);
   const loadSessions = useAppStore((state) => state.loadSessions);
+  const setPage = useAppStore((state) => state.setPage);
   const theme = useAppStore((state) => state.theme);
+  const imageStudio = new URLSearchParams(window.location.search).get('workspace') === 'image';
   const [restoring, setRestoring] = useState(true);
   const [update, setUpdate] = useState<{ type: string; version?: string; notes?: string; percent?: number; message?: string } | null>(null);
 
@@ -29,7 +31,7 @@ export function App() {
       }
       try {
         setUser(JSON.parse(savedUser));
-        await loadSessions('chat');
+        await (imageStudio ? setPage('image') : loadSessions('chat'));
       } catch {
         expire();
       } finally {
@@ -42,7 +44,7 @@ export function App() {
       mounted = false;
       window.removeEventListener(AUTH_EXPIRED_EVENT, expire);
     };
-  }, [loadSessions, setUser]);
+  }, [imageStudio, loadSessions, setPage, setUser]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -54,7 +56,7 @@ export function App() {
     api.setTokens(result.accessToken, result.refreshToken);
     localStorage.setItem('wisadel.user', JSON.stringify(result.user));
     setUser(result.user);
-    void loadSessions('chat');
+    void (imageStudio ? setPage('image') : loadSessions('chat'));
   };
 
   const logout = () => {
@@ -63,7 +65,7 @@ export function App() {
     setUser(null);
   };
 
-  const content = restoring ? <div className="splash">Wisadel</div> : !user ? <LoginPage onAuthenticated={authenticate} /> : <Workspace onLogout={logout} />;
+  const content = restoring ? <div className="splash">Wisadel</div> : !user ? <LoginPage onAuthenticated={authenticate} /> : <Workspace onLogout={logout} standaloneImage={imageStudio} />;
   return <>{content}{update && <UpdateDialog update={update} onClose={() => setUpdate(null)} />}</>;
 }
 

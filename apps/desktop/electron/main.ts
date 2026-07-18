@@ -3,6 +3,7 @@ import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 
 let mainWindow: BrowserWindow | null = null;
+let imageStudioWindow: BrowserWindow | null = null;
 let lastUpdateEvent: object | null = null;
 let tray: Tray | null = null;
 let quitting = false;
@@ -73,9 +74,36 @@ const createWindow = () => {
   else void mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
 };
 
+const openImageStudio = () => {
+  if (imageStudioWindow && !imageStudioWindow.isDestroyed()) {
+    if (imageStudioWindow.isMinimized()) imageStudioWindow.restore();
+    imageStudioWindow.focus();
+    return;
+  }
+  imageStudioWindow = new BrowserWindow({
+    width: 1420,
+    height: 900,
+    minWidth: 1000,
+    minHeight: 680,
+    backgroundColor: '#120b0b',
+    title: 'Stable Diffusion AI · Wisadel',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#120b0b', symbolColor: '#d7cece', height: 38 },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+  });
+  imageStudioWindow.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  imageStudioWindow.on('closed', () => { imageStudioWindow = null; });
+  if (!app.isPackaged) void imageStudioWindow.loadURL('http://localhost:5173/?workspace=image');
+  else void imageStudioWindow.loadFile(path.join(__dirname, '../dist/index.html'), { query: { workspace: 'image' } });
+};
+
 app.whenReady().then(() => {
   ipcMain.handle('wisadel:update:download', () => autoUpdater.downloadUpdate());
   ipcMain.handle('wisadel:update:install', () => autoUpdater.quitAndInstall(false, true));
+  ipcMain.handle('wisadel:open-image-studio', openImageStudio);
   createWindow();
   createTray();
   configureAutoUpdate();

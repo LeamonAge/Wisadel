@@ -11,13 +11,12 @@ import { api } from '../api';
 
 const navItems = [
   { id: 'chat', label: '对话', icon: MessageSquare },
-  { id: 'image', label: '图像生成', icon: ImageIcon },
   { id: 'models', label: '模型', icon: Layers3 },
   { id: 'extensions', label: '扩展', icon: Blocks },
   { id: 'plugins', label: '插件', icon: Zap }
 ] as const;
 
-export function Workspace({ onLogout }: { onLogout: () => void }) {
+export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () => void; standaloneImage?: boolean }) {
   const page = useAppStore((state) => state.page);
   const user = useAppStore((state) => state.user)!;
   const online = useAppStore((state) => state.online);
@@ -59,17 +58,17 @@ export function Workspace({ onLogout }: { onLogout: () => void }) {
     <main className="app-shell">
       <header className="titlebar">
         <div className="account-summary"><div className="avatar">{user.nickname.slice(0, 1).toUpperCase()}</div><div><strong>{user.nickname}</strong><span>{user.role === 'admin' ? '管理员' : '内测用户'}</span></div></div>
-        <div className="titlebar-center"><span className="status-dot" />Wisadel Preview</div>
+        <div className="titlebar-center"><span className="status-dot" />{standaloneImage ? 'Stable Diffusion AI' : 'Wisadel Preview'}</div>
         <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge"><CloudOff size={14} />离线</span>}<button className="icon-button" onClick={onLogout} title="退出登录"><LogOut size={17} /></button></div>
       </header>
-      <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
-        <nav className="rail">
+      <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''} ${standaloneImage ? 'standalone-image' : ''}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
+        {!standaloneImage && <nav className="rail">
           <div className="rail-logo"><Sparkles size={21} /></div>
           <div className="rail-group">
             {navItems.map((item) => <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => void setPage(item.id)} title={item.label}><item.icon size={20} /></button>)}
           </div>
           <button className="rail-settings" onClick={() => setSettingsOpen(true)} title="设置"><Settings size={20} /></button>
-        </nav>
+        </nav>}
         {(page === 'chat' || page === 'image') && <SessionSidebar />}
         {(page === 'chat' || page === 'image') ? <Conversation /> : <PlaceholderPage page={page} />}
         {page === 'image' && <div className="image-panel-resizer" role="separator" aria-label="调整 Stable Diffusion 面板宽度" aria-orientation="vertical" onPointerDown={beginImagePanelResize}><span /></div>}
@@ -275,8 +274,22 @@ function ImageViewer() {
 }
 
 function PlaceholderPage({ page }: { page: 'models' | 'extensions' | 'plugins' }) {
+  if (page === 'models') return <ModelsCatalog />;
   const copy = { models: ['模型管理', '集中查看后续可接入的 Checkpoint、LoRA 与 VAE。'], extensions: ['扩展', 'ControlNet 与高级工作流将在后续版本开放。'], plugins: ['插件', '社区插件体系正在设计中。'] }[page];
   return <section className="placeholder-page"><div className="section-title"><span>后续功能</span><h1>{copy[0]}</h1><p>{copy[1]}</p></div><div className="placeholder-table"><div className="table-toolbar"><div className="search-field"><Search size={15} /><input placeholder="搜索" disabled /></div><button disabled><Plus size={16} />添加</button></div>{['核心能力', '创作辅助', '自动化工作流'].map((name, index) => <div className="placeholder-row" key={name}><div className="resource-icon">{index === 0 ? <Layers3 /> : index === 1 ? <WandSparkles /> : <Blocks />}</div><div><strong>{name}</strong><span>此能力尚未在 MVP 中启用</span></div><span className="coming-soon">即将推出</span></div>)}</div></section>;
+}
+
+function ModelsCatalog() {
+  const openStudio = () => {
+    if (window.wisadelDesktop) void window.wisadelDesktop.openImageStudio();
+    else void window.open(`${window.location.pathname}?workspace=image`, '_blank', 'noopener');
+  };
+  const items = [
+    { title: 'Stable Diffusion AI', tag: '图像生成', description: '进入独立的创作工作台，使用千问协作、Stable Diffusion 参数控制与云端 GPU 生图。', action: openStudio, icon: <WandSparkles size={25} />, ready: true },
+    { title: 'DeepSeek V4 Pro', tag: '对话推理', description: '主对话模型。用于复杂推理、研究、工具执行与长内容协作。', icon: <Bot size={25} />, ready: false },
+    { title: 'Qwen Vision', tag: '多模态', description: '图像理解与创作辅助能力将统一归入此模型中心。', icon: <ScanEye size={25} />, ready: false }
+  ];
+  return <section className="placeholder-page models-page"><div className="section-title"><span>MODEL CENTER</span><h1>模型</h1><p>统一管理 Wisadel 可用的对话、视觉、图像生成与后续接入模型。</p></div><div className="model-catalog">{items.map((item) => <button className={`model-card ${item.ready ? 'available' : ''}`} key={item.title} onClick={item.action} disabled={!item.ready}><div className="model-card-icon">{item.icon}</div><div className="model-card-copy"><div><strong>{item.title}</strong><span>{item.tag}</span></div><p>{item.description}</p></div><div className="model-card-action">{item.ready ? '打开工作台' : '即将接入'}</div></button>)}</div></section>;
 }
 
 function SettingsDialog() {
