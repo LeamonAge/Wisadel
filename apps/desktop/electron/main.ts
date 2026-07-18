@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
+import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 
@@ -104,6 +104,12 @@ app.whenReady().then(() => {
   ipcMain.handle('wisadel:update:download', () => autoUpdater.downloadUpdate());
   ipcMain.handle('wisadel:update:install', () => autoUpdater.quitAndInstall(false, true));
   ipcMain.handle('wisadel:open-image-studio', openImageStudio);
+  ipcMain.handle('wisadel:capture-screen', async () => {
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1920, height: 1080 } });
+    const source = sources[0];
+    if (!source || source.thumbnail.isEmpty()) throw new Error('无法获取当前屏幕截图');
+    return source.thumbnail.toDataURL();
+  });
   createWindow();
   createTray();
   configureAutoUpdate();

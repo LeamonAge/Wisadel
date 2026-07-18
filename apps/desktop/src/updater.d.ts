@@ -6,5 +6,6 @@ interface Window {
   };
   wisadelDesktop?: {
     openImageStudio: () => Promise<void>;
+    captureScreen: () => Promise<string>;
   };
 }

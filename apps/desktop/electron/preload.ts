@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('wisadelUpdater', {
 });
 
 contextBridge.exposeInMainWorld('wisadelDesktop', {
-  openImageStudio: () => ipcRenderer.invoke('wisadel:open-image-studio')
+  openImageStudio: () => ipcRenderer.invoke('wisadel:open-image-studio'),
+  captureScreen: () => ipcRenderer.invoke('wisadel:capture-screen') as Promise<string>
 });

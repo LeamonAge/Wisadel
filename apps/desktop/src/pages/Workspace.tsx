@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   Blocks, Bot, ChevronDown, CircleUserRound, CloudOff, Download, Ellipsis, Eye, Image as ImageIcon,
-  FileText, ImagePlus, Layers3, LogOut, MessageSquare, PanelLeftClose, Paperclip, Pencil, Plus, RotateCcw,
+  FileText, ImagePlus, Layers3, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RotateCcw,
+  Scissors,
   ScanEye, Search, Send, Settings, SlidersHorizontal, Sparkles, Square, Trash2, Upload,
   WandSparkles, X, Zap
 } from 'lucide-react';
@@ -27,6 +28,7 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
     return Number.isFinite(saved) && saved >= 280 && saved <= 620 ? saved : 330;
   });
   const resizingRef = useRef(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('wisadel.sessionSidebar') !== 'closed');
 
   useEffect(() => {
     const resize = (event: PointerEvent) => {
@@ -45,6 +47,7 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
   }, []);
 
   useEffect(() => { localStorage.setItem('wisadel.imagePanelWidth', String(imagePanelWidth)); }, [imagePanelWidth]);
+  useEffect(() => { localStorage.setItem('wisadel.sessionSidebar', sidebarOpen ? 'open' : 'closed'); }, [sidebarOpen]);
 
   const beginImagePanelResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (page !== 'image') return;
@@ -61,7 +64,7 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
         <div className="titlebar-center"><span className="status-dot" />{standaloneImage ? 'Stable Diffusion AI' : 'Wisadel Preview'}</div>
         <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge"><CloudOff size={14} />离线</span>}<button className="icon-button" onClick={onLogout} title="退出登录"><LogOut size={17} /></button></div>
       </header>
-      <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''} ${standaloneImage ? 'standalone-image' : ''}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
+      <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''} ${standaloneImage ? 'standalone-image' : ''} ${sidebarOpen ? '' : 'sidebar-collapsed'}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
         {!standaloneImage && <nav className="rail">
           <div className="rail-logo"><Sparkles size={21} /></div>
           <div className="rail-group">
@@ -69,8 +72,8 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
           </div>
           <button className="rail-settings" onClick={() => setSettingsOpen(true)} title="设置"><Settings size={20} /></button>
         </nav>}
-        {(page === 'chat' || page === 'image') && <SessionSidebar />}
-        {(page === 'chat' || page === 'image') ? <Conversation /> : <PlaceholderPage page={page} />}
+        {(page === 'chat' || page === 'image') && sidebarOpen && <SessionSidebar onClose={() => setSidebarOpen(false)} />}
+        {(page === 'chat' || page === 'image') ? <Conversation sidebarOpen={sidebarOpen} onOpenSidebar={() => setSidebarOpen(true)} /> : <PlaceholderPage page={page} />}
         {page === 'image' && <div className="image-panel-resizer" role="separator" aria-label="调整 Stable Diffusion 面板宽度" aria-orientation="vertical" onPointerDown={beginImagePanelResize}><span /></div>}
         {page === 'image' && <ImageInspector />}
       </div>
@@ -108,7 +111,7 @@ function SanityCenter() {
   return <><button className="sanity-button" onClick={show} title="理智中心"><img src="/sanity-icon.png" alt="" /><span>理智</span><strong>{loading && !account ? '--' : (account?.balance ?? 0).toFixed(2)}</strong></button>{open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><section className="sanity-dialog" onMouseDown={(event) => event.stopPropagation()}><header><div><span>WISADEL SANITY</span><h2>理智中心</h2></div><button className="icon-button" onClick={() => setOpen(false)} title="关闭"><X size={19} /></button></header><div className="sanity-balance"><img src="/sanity-icon.png" alt="理智" /><div><span>当前可用理智</span><strong>{(account?.balance ?? 0).toFixed(3)}</strong><small>100 理智 = 1 元人民币</small></div></div><div className="sanity-note">新用户初始获得 100 理智。对话完成后会根据模型实际返回的输入与输出 token 精确结算；生图和云端 GPU 当前不扣理智。</div><div className="sanity-ledger"><div className="sanity-ledger-heading"><strong>最近结算</strong><span>精确至 0.001 理智</span></div>{ledger.length ? ledger.map((entry) => <div className="sanity-entry" key={entry.id}><div><strong>{entry.description}</strong><span>{entry.model} · 输入 {entry.inputTokens.toLocaleString()} / 输出 {entry.outputTokens.toLocaleString()} token</span></div><div><b>{(entry.deltaMilli / 1000).toFixed(3)}</b><span>余额 {(entry.balanceAfterMilli / 1000).toFixed(3)}</span></div></div>) : <div className="sanity-empty">尚无结算记录</div>}</div></section></div>}</>;
 }
 
-function SessionSidebar() {
+function SessionSidebar({ onClose }: { onClose: () => void }) {
   const sessions = useAppStore((state) => state.sessions);
   const activeId = useAppStore((state) => state.activeSessionId);
   const page = useAppStore((state) => state.page);
@@ -120,7 +123,7 @@ function SessionSidebar() {
 
   const filtered = sessions.filter((session) => `${session.title}${session.preview}`.toLowerCase().includes(search.toLowerCase()));
   return <aside className="session-sidebar">
-    <div className="sidebar-heading"><div><span>{page === 'chat' ? '对话工作区' : '图像工作区'}</span><strong>{page === 'chat' ? 'Wisadel 助手' : '创意画师'}</strong></div><button className="icon-button" title="收起列表"><PanelLeftClose size={18} /></button></div>
+    <div className="sidebar-heading"><div><span>{page === 'chat' ? '对话工作区' : '图像工作区'}</span><strong>{page === 'chat' ? 'Wisadel 助手' : '创意画师'}</strong></div><button className="icon-button" onClick={onClose} title="收起历史会话"><PanelLeftClose size={18} /></button></div>
     <div className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索会话" /></div>
     <div className="session-list">
       {filtered.map((session) => <SessionRow key={session.id} session={session} active={session.id === activeId} onSelect={() => void select(session.id)} onDelete={() => void remove(session.id)} onRename={(title) => void rename(session.id, title)} />)}
@@ -150,7 +153,7 @@ function SessionRow({ session, active, onSelect, onDelete, onRename }: { session
   </div>;
 }
 
-function Conversation() {
+function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; onOpenSidebar: () => void }) {
   const page = useAppStore((state) => state.page);
   const sessions = useAppStore((state) => state.sessions);
   const activeId = useAppStore((state) => state.activeSessionId);
@@ -172,12 +175,16 @@ function Conversation() {
   const attachImage = useAppStore((state) => state.attachImage);
   const previewImage = useAppStore((state) => state.setPreviewImage);
   const [input, setInput] = useState('');
+  const [capturing, setCapturing] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [showReturnBottom, setShowReturnBottom] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const active = sessions.find((session) => session.id === activeId);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, streaming]);
   useEffect(() => { setInput(''); }, [page, activeId]);
   const submit = () => {
@@ -189,10 +196,23 @@ function Conversation() {
     void send(value);
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } };
+  const captureScreen = async () => {
+    if (capturing || pendingImages.length >= 4) return;
+    setCapturing(true); setCaptureError(null);
+    try {
+      const dataUrl = await window.wisadelDesktop?.captureScreen();
+      if (!dataUrl) throw new Error('截图功能仅可在 Wisadel 桌面端使用');
+      const blob = await (await fetch(dataUrl)).blob();
+      const uploaded = await api.uploadImage(new File([blob], `Wisadel 截图 ${new Date().toLocaleString()}.png`, { type: 'image/png' }));
+      attachImage(uploaded.url);
+    } catch (error) { setCaptureError(error instanceof Error ? error.message : '截图失败，请重试');
+    } finally { setCapturing(false); }
+  };
+  const returnToBottom = () => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
 
   return <section className="conversation">
-    <header className="conversation-header"><div><span>{page === 'chat' ? 'AI 对话' : '图像生成'}</span><h2>{active?.title ?? (loadingConversation ? '正在载入' : '新对话')}</h2></div><button className="model-selector"><span className="model-status" />{page === 'chat' ? 'DeepSeek' : 'Qwen Image'}<ChevronDown size={15} /></button></header>
-    <div className="message-list">
+    <header className="conversation-header"><div className="conversation-title">{!sidebarOpen && <button className="icon-button history-toggle" onClick={onOpenSidebar} title="打开历史会话"><PanelLeftOpen size={18} /></button>}<div><span>{page === 'chat' ? 'AI 对话' : '图像生成'}</span><h2>{active?.title ?? (loadingConversation ? '正在载入' : '新对话')}</h2></div></div><button className="model-selector"><span className="model-status" />{page === 'chat' ? 'DeepSeek' : 'Qwen Image'}<ChevronDown size={15} /></button></header>
+    <div className="message-list" ref={listRef} onScroll={(event) => { const target = event.currentTarget; setShowReturnBottom(target.scrollHeight - target.scrollTop - target.clientHeight > 180); }}>
       {loadingConversation && <div className="conversation-loading"><Sparkles size={18} />正在恢复会话</div>}
       {!loadingConversation && !messages.length && <div className="empty-conversation"><div className="empty-symbol">{page === 'chat' ? <MessageSquare size={25} /> : <WandSparkles size={25} />}</div><h3>{page === 'chat' ? '今天想一起解决什么？' : '描述你想创造的画面'}</h3><p>{page === 'chat' ? '从问题、想法或一段待整理的内容开始。' : '我会先整理提示词与参数，由你确认后再生成。'}</p><div className="suggestions">{(page === 'chat' ? ['帮我梳理一个产品想法', '解释一段复杂概念', '制定今天的工作计划'] : ['雨夜里的未来城市', '极简主义产品摄影', '电影感山谷晨雾']).map((text) => <button key={text} onClick={() => setInput(text)}>{text}</button>)}</div></div>}
       {messages.map((message) => <div key={message.id} className={`message ${message.role}`}><div className="message-avatar">{message.role === 'user' ? <CircleUserRound size={18} /> : <Sparkles size={17} />}</div><div className="message-body"><div className="message-meta">{message.role === 'user' ? '你' : page === 'chat' ? 'Wisadel' : '创意画师'}<span>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div><div className="message-content">{message.content}</div>{!!message.imageUrls.length && <div className="message-images">{message.imageUrls.map((url) => <div className="message-image" key={url}><button onClick={() => previewImage(url)} title="查看大图"><img src={url} alt="消息图片" /></button>{page === 'image' && <button className="analyze-image" onClick={() => attachImage(url)} title="交给千问分析"><ScanEye size={14} />分析</button>}</div>)}</div>}{!!message.attachments?.length && <div className="message-files">{message.attachments.map((file) => <a href={file.url} target="_blank" rel="noreferrer" key={file.url}><FileText size={15} /><span>{file.name}</span><small>{Math.max(1, Math.ceil(file.size / 1024))} KB</small></a>)}</div>}{message.status === 'failed' && <span className="message-error">{sendError ?? '发送失败，请重试'}</span>}</div></div>)}
@@ -200,7 +220,8 @@ function Conversation() {
       {streaming && <div className="message assistant"><div className="message-avatar"><Sparkles size={17} /></div><div className="message-body"><div className="message-meta">Wisadel<span>正在输入</span></div><div className="message-content streaming">{streaming}</div></div></div>}
       <div ref={endRef} />
     </div>
-    <div className="composer-wrap"><div className="composer">{!!pendingImages.length && <div className="pending-images">{pendingImages.map((url) => <div key={url}><img src={url} alt="待发送图片" /><button type="button" onClick={() => removePending(url)} title="移除图片"><X size={13} /></button></div>)}</div>}{!!pendingAttachments.length && <div className="pending-files">{pendingAttachments.map((file) => <div key={file.url}><FileText size={15} /><span>{file.name}</span><button type="button" onClick={() => removeAttachment(file.url)} title="移除文件"><X size={13} /></button></div>)}</div>}<textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keyDown} placeholder={page === 'chat' ? '输入消息，或上传本地文件...' : '描述画面，或上传图片和文件让千问分析...'} rows={1} /><div className="composer-footer"><div className="composer-tools"><input ref={uploadRef} type="file" accept={page === 'image' ? 'image/*,.txt,.md,.json,.csv,.pdf' : undefined} hidden multiple onChange={(event) => { for (const file of Array.from(event.target.files ?? []).slice(0, 8 - pendingAttachments.length)) void uploadFile(file); event.target.value = ''; }} /><button type="button" className="attach-command" onClick={() => uploadRef.current?.click()} disabled={uploading || pendingAttachments.length >= 8} title="上传本地文件"><Paperclip size={16} /></button><span>{uploading ? '正在上传文件' : 'Enter 发送 · Shift + Enter 换行'}</span></div><button type="button" className="send-command" onClick={submit} disabled={(!input.trim() && !pendingImages.length && !pendingAttachments.length) || sending || uploading || !activeId} aria-label="发送消息" title="发送消息">{sending ? <Square size={16} /> : <Send size={17} />}</button></div>{sendError && <div className="composer-error">{sendError}</div>}</div></div>
+    {showReturnBottom && <button className="return-bottom" onClick={returnToBottom}><ChevronDown size={16} />回到底部</button>}
+    <div className="composer-wrap"><div className="composer">{!!pendingImages.length && <div className="pending-images">{pendingImages.map((url) => <div key={url}><img src={url} alt="待发送图片" /><button type="button" onClick={() => removePending(url)} title="移除图片"><X size={13} /></button></div>)}</div>}{!!pendingAttachments.length && <div className="pending-files">{pendingAttachments.map((file) => <div key={file.url}><FileText size={15} /><span>{file.name}</span><button type="button" onClick={() => removeAttachment(file.url)} title="移除文件"><X size={13} /></button></div>)}</div>}<textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keyDown} placeholder={page === 'chat' ? '输入消息，或上传本地文件...' : '描述画面，或上传图片和文件让千问分析...'} rows={1} /><div className="composer-footer"><div className="composer-tools"><input ref={uploadRef} type="file" accept={page === 'image' ? 'image/*,.txt,.md,.json,.csv,.pdf' : undefined} hidden multiple onChange={(event) => { for (const file of Array.from(event.target.files ?? []).slice(0, 8 - pendingAttachments.length)) void uploadFile(file); event.target.value = ''; }} /><button type="button" className="attach-command" onClick={() => uploadRef.current?.click()} disabled={uploading || pendingAttachments.length >= 8} title="上传本地文件"><Paperclip size={16} /></button><button type="button" className="capture-command" onClick={() => void captureScreen()} disabled={capturing || pendingImages.length >= 4} title="截取当前屏幕并附加"><Scissors size={16} /></button><span>{capturing ? '正在截取屏幕' : uploading ? '正在上传文件' : 'Enter 发送 · Shift + Enter 换行'}</span></div><button type="button" className="send-command" onClick={submit} disabled={(!input.trim() && !pendingImages.length && !pendingAttachments.length) || sending || uploading || !activeId} aria-label="发送消息" title="发送消息">{sending ? <Square size={16} /> : <Send size={17} />}</button></div>{(sendError || captureError) && <div className="composer-error">{sendError ?? captureError}</div>}</div></div>
   </section>;
 }
 
