@@ -1,4 +1,4 @@
-import type { Attachment, AuthResponse, CreateImageTaskInput, Health, ImageAgentAction, ImageTask, Message, SdCapabilities, SdParams, Session, SessionKind, UploadFileResponse, UploadImageResponse } from '@wisadel/contracts';
+import type { Attachment, AuthResponse, CreateImageTaskInput, Health, ImageAgentAction, ImageTask, Message, SanityAccount, SanityLedgerEntry, SdCapabilities, SdParams, Session, SessionKind, UploadFileResponse, UploadImageResponse } from '@wisadel/contracts';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'https://u1056851-8a8f-2f197363.westc.seetacloud.com:8443/api/v1';
 export const AUTH_EXPIRED_EVENT = 'wisadel:auth-expired';
@@ -34,6 +34,8 @@ export class ApiClient {
   }
 
   health = () => this.request<Health>('/health');
+  sanityAccount = () => this.request<SanityAccount>('/billing/sanity');
+  sanityLedger = () => this.request<SanityLedgerEntry[]>('/billing/sanity/ledger');
   register = (email: string, password: string, nickname: string) =>
     this.request<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, nickname }) });
   login = (email: string, password: string) =>
@@ -112,6 +114,7 @@ export class ApiClient {
         if (event === 'reasoning') onReasoning?.(data.label);
         if (event === 'params') onParams?.(data);
         if (event === 'image_task') onImageTask?.(data);
+        if (event === 'sanity') window.dispatchEvent(new CustomEvent('wisadel:sanity', { detail: data }));
         if (event === 'done') result = data;
       }
     }

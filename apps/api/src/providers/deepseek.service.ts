@@ -9,13 +9,17 @@ type ProviderMessage = {
   tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
 };
 
+type ProviderUsage = { prompt_tokens?: number; completion_tokens?: number };
+type ProviderReply = { message: ProviderMessage; model: string; usages: ProviderUsage[] };
+export type SettledModelUsage = { model: string; inputTokens: number; outputTokens: number };
+
 @Injectable()
 export class DeepSeekService {
   constructor(private readonly tools: AgentToolsService) {}
 
   get configured() { return Boolean(process.env.DEEPSEEK_API_KEY); }
 
-  async *stream(messages: Message[], latest: string, onProgress?: (label: string) => void): AsyncGenerator<string> {
+  async *stream(messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void): AsyncGenerator<string> {
     if ((process.env.AI_MODE ?? 'mock') === 'mock' || !this.configured) {
       const text = `这是 Wisadel 的本地模拟回复。我已经收到：${latest}。配置 DeepSeek 环境变量后，这里会切换为真实 Agent。`;
       for (const chunk of text.match(/.{1,8}/gu) ?? [text]) { yield chunk; await new Promise((resolve) => setTimeout(resolve, 20)); }
@@ -42,14 +46,15 @@ export class DeepSeekService {
       let stopReason = '';
       for (let turn = 0; turn < 10; turn += 1) {
         const reply = await this.complete(conversation);
-        const toolCalls = reply.tool_calls ?? [];
+        for (const usage of reply.usages) onUsage?.({ model: reply.model, inputTokens: usage.prompt_tokens ?? 0, outputTokens: usage.completion_tokens ?? 0 });
+        const toolCalls = reply.message.tool_calls ?? [];
         if (!toolCalls.length) {
-          finalText = reply.content?.trim() || '任务已经处理完成。';
+          finalText = reply.message.content?.trim() || '任务已经处理完成。';
           break;
         }
 
-        conversation.push({ role: 'assistant', content: reply.content ?? null, tool_calls: toolCalls });
-        if (reply.content?.trim()) onProgress?.(reply.content.trim().replace(/\s+/g, ' ').slice(0, 300));
+        conversation.push({ role: 'assistant', content: reply.message.content ?? null, tool_calls: toolCalls });
+        if (reply.message.content?.trim()) onProgress?.(reply.message.content.trim().replace(/\s+/g, ' ').slice(0, 300));
         for (const call of toolCalls) {
           onProgress?.(this.toolLabel(call.function.name, call.function.arguments));
           const signature = `${call.function.name}:${call.function.arguments}`;
@@ -77,7 +82,8 @@ export class DeepSeekService {
           content: `工具执行阶段已经结束（${stopReason || '达到 10 轮安全上限'}）。现在禁止继续调用工具。请根据已有工具结果直接给出最终答复：说明实际完成的修改、尚未完成的部分及具体原因；不要声称仍需调用工具，也不要输出“工具调用达到上限”。`
         });
         const closing = await this.complete(conversation, false);
-        finalText = closing.content?.trim() || '本轮工具执行已结束，但模型没有返回总结。已有修改将保留。';
+        for (const usage of closing.usages) onUsage?.({ model: closing.model, inputTokens: usage.prompt_tokens ?? 0, outputTokens: usage.completion_tokens ?? 0 });
+        finalText = closing.message.content?.trim() || '本轮工具执行已结束，但模型没有返回总结。已有修改将保留。';
       }
       for (const chunk of finalText.match(/[\s\S]{1,16}/g) ?? [finalText]) yield chunk;
     } catch (error) {
@@ -96,7 +102,7 @@ export class DeepSeekService {
     return detail ? `${label}：${detail}` : label;
   }
 
-  private async complete(messages: ProviderMessage[], allowTools = true, model = process.env.DEEPSEEK_MODEL ?? 'deepseek-chat'): Promise<ProviderMessage> {
+  private async complete(messages: ProviderMessage[], allowTools = true, model = process.env.DEEPSEEK_MODEL ?? 'deepseek-chat'): Promise<ProviderReply> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120_000);
     try {
@@ -112,16 +118,19 @@ export class DeepSeekService {
           temperature: 0.2
         })
       });
-      const body = await response.json().catch(() => undefined) as { choices?: Array<{ message?: ProviderMessage }>; error?: { message?: string } } | undefined;
+      const body = await response.json().catch(() => undefined) as { model?: string; usage?: ProviderUsage; choices?: Array<{ message?: ProviderMessage }>; error?: { message?: string } } | undefined;
       if (!response.ok) throw new ServiceUnavailableException(`DeepSeek 请求失败 (${response.status})${body?.error?.message ? `：${body.error.message}` : ''}`);
       const message = body?.choices?.[0]?.message;
       if (!message) throw new ServiceUnavailableException('DeepSeek 没有返回有效消息');
       if (!message.tool_calls?.length && /DSML|tool_calls>|invoke name=/i.test(message.content ?? '')) {
         const toolModel = process.env.DEEPSEEK_TOOL_MODEL ?? 'deepseek-chat';
-        if (model !== toolModel) return this.complete(messages, allowTools, toolModel);
+        if (model !== toolModel) {
+          const fallback = await this.complete(messages, allowTools, toolModel);
+          return { ...fallback, usages: [body?.usage ?? {}, ...fallback.usages] };
+        }
         throw new ServiceUnavailableException('当前 DeepSeek 模型返回了不兼容的工具协议，请配置支持标准 tool_calls 的模型');
       }
-      return message;
+      return { message, model: body?.model ?? model, usages: [body?.usage ?? {}] };
     } finally { clearTimeout(timer); }
   }
 }

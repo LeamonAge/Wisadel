@@ -33,6 +33,23 @@ export const authResponseSchema = z.object({
   refreshToken: z.string()
 });
 
+export const sanityAccountSchema = z.object({
+  balanceMilli: z.number().int().min(0),
+  balance: z.number().min(0),
+  unit: z.literal('sanity')
+});
+
+export const sanityLedgerEntrySchema = z.object({
+  id: z.string().uuid(),
+  deltaMilli: z.number().int(),
+  balanceAfterMilli: z.number().int().min(0),
+  inputTokens: z.number().int().min(0),
+  outputTokens: z.number().int().min(0),
+  model: z.string().min(1).max(100),
+  description: z.string().min(1).max(255),
+  createdAt: z.string().datetime()
+});
+
 export const sessionKindSchema = z.enum(['chat', 'image']);
 
 export const sessionSchema = z.object({
@@ -187,6 +204,8 @@ export type User = z.infer<typeof userSchema>;
 export type RegisterInput = z.infer<typeof registerInputSchema>;
 export type LoginInput = z.infer<typeof loginInputSchema>;
 export type AuthResponse = z.infer<typeof authResponseSchema>;
+export type SanityAccount = z.infer<typeof sanityAccountSchema>;
+export type SanityLedgerEntry = z.infer<typeof sanityLedgerEntrySchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type SessionKind = z.infer<typeof sessionKindSchema>;
 export type Message = z.infer<typeof messageSchema>;

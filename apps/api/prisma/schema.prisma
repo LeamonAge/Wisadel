@@ -45,8 +45,27 @@ model User {
   sessions     ChatSession[]
   refreshTokens RefreshToken[]
   imageTasks   ImageTask[]
+  sanityMilli  Int            @default(100000) @map("sanity_milli")
+  sanityLedger SanityLedgerEntry[]
 
   @@map("users")
+}
+
+model SanityLedgerEntry {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  deltaMilli        Int      @map("delta_milli")
+  balanceAfterMilli Int      @map("balance_after_milli")
+  inputTokens       Int      @default(0) @map("input_tokens")
+  outputTokens      Int      @default(0) @map("output_tokens")
+  model             String   @db.VarChar(100)
+  description       String   @db.VarChar(255)
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("sanity_ledger_entries")
 }
 
 model RefreshToken {

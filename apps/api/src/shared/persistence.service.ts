@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { ImageTask, Message, SdParams, Session, SessionKind, User } from '@wisadel/contracts';
-import type { ChatMessage, ChatSession, ImageTask as DbImageTask, User as DbUser } from '@prisma/client';
+import type { ImageTask, Message, SanityAccount, SanityLedgerEntry, SdParams, Session, SessionKind, User } from '@wisadel/contracts';
+import type { ChatMessage, ChatSession, ImageTask as DbImageTask, SanityLedgerEntry as DbSanityLedgerEntry, User as DbUser } from '@prisma/client';
 import { MemoryStore, type StoredUser } from './memory.store';
 import { PrismaService } from './prisma.service';
 
@@ -30,7 +30,7 @@ export class PersistenceService {
   async createUser(input: { email: string; passwordHash: string; nickname: string; role: 'user' | 'admin' }): Promise<User> {
     if (!this.integrated) {
       const now = new Date().toISOString();
-      const user: StoredUser = { id: crypto.randomUUID(), email: input.email, passwordHash: input.passwordHash, nickname: input.nickname, avatarUrl: null, role: input.role, createdAt: now };
+      const user: StoredUser = { id: crypto.randomUUID(), email: input.email, passwordHash: input.passwordHash, nickname: input.nickname, avatarUrl: null, role: input.role, createdAt: now, sanityMilli: 100_000 };
       this.memory.users.set(user.id, user);
       this.memory.usersByEmail.set(user.email, user.id);
       return this.publicUser(user);
@@ -138,6 +138,44 @@ export class PersistenceService {
     return this.publicImageTask(task);
   }
 
+  async sanityAccount(userId: string): Promise<SanityAccount> {
+    if (!this.integrated) {
+      const user = this.memory.users.get(userId);
+      if (!user) throw new Error('user not found');
+      return this.publicSanityAccount(user.sanityMilli);
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { sanityMilli: true } });
+    if (!user) throw new Error('user not found');
+    return this.publicSanityAccount(user.sanityMilli);
+  }
+
+  async listSanityLedger(userId: string, take = 30): Promise<SanityLedgerEntry[]> {
+    if (!this.integrated) return (this.memory.sanityLedger.get(userId) ?? []).slice(0, take);
+    const entries = await this.prisma.sanityLedgerEntry.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take });
+    return entries.map((entry) => this.publicSanityLedgerEntry(entry));
+  }
+
+  async settleSanityUsage(input: { userId: string; model: string; inputTokens: number; outputTokens: number; costMilli: number }): Promise<SanityLedgerEntry | null> {
+    if (input.costMilli <= 0) return null;
+    const description = `${input.model} 对话结算`;
+    if (!this.integrated) {
+      const user = this.memory.users.get(input.userId);
+      if (!user || user.sanityMilli < input.costMilli) throw new Error('insufficient sanity');
+      user.sanityMilli -= input.costMilli;
+      const entry: SanityLedgerEntry = { id: crypto.randomUUID(), deltaMilli: -input.costMilli, balanceAfterMilli: user.sanityMilli, inputTokens: input.inputTokens, outputTokens: input.outputTokens, model: input.model, description, createdAt: new Date().toISOString() };
+      this.memory.sanityLedger.set(input.userId, [entry, ...(this.memory.sanityLedger.get(input.userId) ?? [])]);
+      return entry;
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: input.userId }, select: { sanityMilli: true } });
+      if (!user || user.sanityMilli < input.costMilli) throw new Error('insufficient sanity');
+      const balanceAfterMilli = user.sanityMilli - input.costMilli;
+      await tx.user.update({ where: { id: input.userId }, data: { sanityMilli: balanceAfterMilli } });
+      const entry = await tx.sanityLedgerEntry.create({ data: { userId: input.userId, deltaMilli: -input.costMilli, balanceAfterMilli, inputTokens: input.inputTokens, outputTokens: input.outputTokens, model: input.model, description } });
+      return this.publicSanityLedgerEntry(entry);
+    }, { isolationLevel: 'Serializable' });
+  }
+
   async findImageTask(userId: string, id: string): Promise<ImageTask | null> {
     if (!this.integrated) { const task = this.memory.imageTasks.get(id); return task?.userId === userId ? this.publicImageTask(task) : null; }
     const task = await this.prisma.imageTask.findFirst({ where: { id, userId } }); return task ? this.publicImageTask(task) : null;
@@ -178,8 +216,10 @@ export class PersistenceService {
   }
 
   private publicUser(user: DbUser | StoredUser): User { return { id: user.id, email: user.email, nickname: user.nickname, avatarUrl: user.avatarUrl, role: user.role.toString().toLowerCase() as User['role'], createdAt: user.createdAt instanceof Date ? user.createdAt.toISOString() : user.createdAt }; }
-  private userWithPassword(user: DbUser): StoredUser { return { ...this.publicUser(user), passwordHash: user.passwordHash }; }
+  private userWithPassword(user: DbUser): StoredUser { return { ...this.publicUser(user), passwordHash: user.passwordHash, sanityMilli: user.sanityMilli }; }
   private publicSession(session: ChatSession | (Session & { userId: string }), preview = '开始新的会话'): Session { return { id: session.id, title: session.title, kind: session.kind.toString().toLowerCase() as SessionKind, model: session.model, preview: 'preview' in session ? session.preview : preview, updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : session.updatedAt }; }
   private publicMessage(message: ChatMessage): Message { const metadata = (message.metadata ?? {}) as any; return { id: message.id, clientId: message.clientId, sessionId: message.sessionId, role: message.role.toLowerCase() as Message['role'], content: message.content, status: 'sent', imageUrls: metadata.imageUrls ?? [], attachments: metadata.attachments ?? [], createdAt: message.createdAt.toISOString() }; }
   private publicImageTask(task: DbImageTask | (ImageTask & { userId: string; clientId: string })): ImageTask { return { id: task.id, sessionId: task.sessionId, status: task.status.toString().toLowerCase() as ImageTask['status'], progress: task.progress, params: task.params as SdParams, resultUrls: Array.isArray(task.resultUrls) ? task.resultUrls as string[] : [], errorCode: task.errorCode, errorMessage: task.errorMessage, retryOfId: task.retryOfId, createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt, updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt }; }
+  private publicSanityAccount(balanceMilli: number): SanityAccount { return { balanceMilli, balance: balanceMilli / 1000, unit: 'sanity' }; }
+  private publicSanityLedgerEntry(entry: DbSanityLedgerEntry): SanityLedgerEntry { return { id: entry.id, deltaMilli: entry.deltaMilli, balanceAfterMilli: entry.balanceAfterMilli, inputTokens: entry.inputTokens, outputTokens: entry.outputTokens, model: entry.model, description: entry.description, createdAt: entry.createdAt.toISOString() }; }
 }

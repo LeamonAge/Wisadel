@@ -5,7 +5,7 @@ import {
   ScanEye, Search, Send, Settings, SlidersHorizontal, Sparkles, Square, Trash2, Upload,
   WandSparkles, X, Zap
 } from 'lucide-react';
-import type { SdParams, Session } from '@wisadel/contracts';
+import type { SanityAccount, SanityLedgerEntry, SdParams, Session } from '@wisadel/contracts';
 import { useAppStore } from '../store';
 import { api } from '../api';
 
@@ -60,7 +60,7 @@ export function Workspace({ onLogout }: { onLogout: () => void }) {
       <header className="titlebar">
         <div className="account-summary"><div className="avatar">{user.nickname.slice(0, 1).toUpperCase()}</div><div><strong>{user.nickname}</strong><span>{user.role === 'admin' ? '管理员' : '内测用户'}</span></div></div>
         <div className="titlebar-center"><span className="status-dot" />Wisadel Preview</div>
-        <div className="titlebar-actions">{!online && <span className="offline-badge"><CloudOff size={14} />离线</span>}<button className="icon-button" onClick={onLogout} title="退出登录"><LogOut size={17} /></button></div>
+        <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge"><CloudOff size={14} />离线</span>}<button className="icon-button" onClick={onLogout} title="退出登录"><LogOut size={17} /></button></div>
       </header>
       <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
         <nav className="rail">
@@ -79,6 +79,34 @@ export function Workspace({ onLogout }: { onLogout: () => void }) {
       <ImageViewer />
     </main>
   );
+}
+
+function SanityCenter() {
+  const [account, setAccount] = useState<SanityAccount | null>(null);
+  const [ledger, setLedger] = useState<SanityLedgerEntry[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const refresh = async (includeLedger = false) => {
+    try {
+      const [nextAccount, nextLedger] = await Promise.all([api.sanityAccount(), includeLedger ? api.sanityLedger() : Promise.resolve(null)]);
+      setAccount(nextAccount);
+      if (nextLedger) setLedger(nextLedger);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    void refresh();
+    const onSanity = (event: Event) => {
+      const detail = (event as CustomEvent<{ balanceMilli: number }>).detail;
+      if (detail?.balanceMilli !== undefined) setAccount({ balanceMilli: detail.balanceMilli, balance: detail.balanceMilli / 1000, unit: 'sanity' });
+      if (open) void refresh(true);
+    };
+    window.addEventListener('wisadel:sanity', onSanity);
+    return () => window.removeEventListener('wisadel:sanity', onSanity);
+  }, [open]);
+
+  const show = () => { setOpen(true); setLoading(true); void refresh(true); };
+  return <><button className="sanity-button" onClick={show} title="理智中心"><img src="/sanity-icon.png" alt="" /><span>理智</span><strong>{loading && !account ? '--' : (account?.balance ?? 0).toFixed(2)}</strong></button>{open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><section className="sanity-dialog" onMouseDown={(event) => event.stopPropagation()}><header><div><span>WISADEL SANITY</span><h2>理智中心</h2></div><button className="icon-button" onClick={() => setOpen(false)} title="关闭"><X size={19} /></button></header><div className="sanity-balance"><img src="/sanity-icon.png" alt="理智" /><div><span>当前可用理智</span><strong>{(account?.balance ?? 0).toFixed(3)}</strong><small>100 理智 = 1 元人民币</small></div></div><div className="sanity-note">新用户初始获得 100 理智。对话完成后会根据模型实际返回的输入与输出 token 精确结算；生图和云端 GPU 当前不扣理智。</div><div className="sanity-ledger"><div className="sanity-ledger-heading"><strong>最近结算</strong><span>精确至 0.001 理智</span></div>{ledger.length ? ledger.map((entry) => <div className="sanity-entry" key={entry.id}><div><strong>{entry.description}</strong><span>{entry.model} · 输入 {entry.inputTokens.toLocaleString()} / 输出 {entry.outputTokens.toLocaleString()} token</span></div><div><b>{(entry.deltaMilli / 1000).toFixed(3)}</b><span>余额 {(entry.balanceAfterMilli / 1000).toFixed(3)}</span></div></div>) : <div className="sanity-empty">尚无结算记录</div>}</div></section></div>}</>;
 }
 
 function SessionSidebar() {

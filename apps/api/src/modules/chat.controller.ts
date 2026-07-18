@@ -10,6 +10,8 @@ import { DEFAULT_SD_PARAMS } from '@wisadel/contracts';
 import { StableDiffusionService } from '../providers/stable-diffusion.service';
 import { ImageService } from './image.service';
 import { ImageStorageService } from '../shared/image-storage.service';
+import { BillingService } from './billing.service';
+import type { SettledModelUsage } from '../providers/deepseek.service';
 
 @Controller('chat')
 @UseGuards(AuthGuard)
@@ -20,7 +22,8 @@ export class ChatController {
     private readonly qwen: QwenService,
     private readonly sd: StableDiffusionService,
     private readonly images: ImageService,
-    private readonly storage: ImageStorageService
+    private readonly storage: ImageStorageService,
+    private readonly billing: BillingService
   ) {}
 
   @Get('sessions')
@@ -57,6 +60,7 @@ export class ChatController {
   ) {
     const user = currentUser(request);
     const session = await this.chat.getOwnedSession(user.sub, id);
+    if (session.kind === 'chat') await this.billing.assertCanStartChat(user.sub);
     const history = await this.chat.listMessages(user.sub, id);
     const userMessage = await this.chat.addUserMessage(user.sub, id, input);
 
@@ -67,6 +71,7 @@ export class ChatController {
     response.write(`event: accepted\ndata: ${JSON.stringify(userMessage)}\n\n`);
 
     let answer = '';
+    const usage: SettledModelUsage[] = [];
     const sendReasoning = (label: string) => response.write(`event: reasoning\ndata: ${JSON.stringify({ label })}\n\n`);
     const attachmentTexts = await Promise.all((input.attachments ?? []).map(async (attachment) => {
       const text = await this.storage.attachmentText(attachment.url, attachment.mimeType).catch(() => null);
@@ -99,12 +104,17 @@ export class ChatController {
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
     } else {
-      for await (const chunk of this.deepseek.stream(history, enrichedContent, sendReasoning)) {
+      for await (const chunk of this.deepseek.stream(history, enrichedContent, sendReasoning, (item) => usage.push(item))) {
         answer += chunk;
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
     }
     const assistant = await this.chat.addAssistantMessage(id, answer);
+    if (session.kind === 'chat' && usage.length) {
+      const entries = await this.billing.settleChatUsage(user.sub, usage);
+      const latest = entries.at(-1);
+      if (latest) response.write(`event: sanity\ndata: ${JSON.stringify({ balanceMilli: latest.balanceAfterMilli, costMilli: -latest.deltaMilli })}\n\n`);
+    }
     response.write(`event: done\ndata: ${JSON.stringify(assistant)}\n\n`);
     response.end();
   }

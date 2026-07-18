@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { ImageTask, Message, Session, User } from '@wisadel/contracts';
+import type { ImageTask, Message, SanityLedgerEntry, Session, User } from '@wisadel/contracts';
 
 export interface StoredUser extends User {
   passwordHash: string;
+  sanityMilli: number;
 }
 
 @Injectable()
@@ -12,4 +13,5 @@ export class MemoryStore {
   readonly sessions = new Map<string, Session & { userId: string }>();
   readonly messages = new Map<string, Message[]>();
   readonly imageTasks = new Map<string, ImageTask & { userId: string; clientId: string }>();
+  readonly sanityLedger = new Map<string, SanityLedgerEntry[]>();
 }

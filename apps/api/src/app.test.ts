@@ -3,6 +3,7 @@ import { DEFAULT_SD_PARAMS } from '@wisadel/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from './modules/auth.service';
 import { ChatService } from './modules/chat.service';
+import { BillingService } from './modules/billing.service';
 import { DeepSeekService } from './providers/deepseek.service';
 import { QwenService } from './providers/qwen.service';
 import { StableDiffusionService } from './providers/stable-diffusion.service';
@@ -50,6 +51,21 @@ describe('ChatService', () => {
 
     expect(tasks).toHaveLength(1);
     expect(tasks[0]?.sessionId).toBe(first.id);
+  });
+});
+
+describe('BillingService', () => {
+  it('settles the documented Pro example in milli-sanity without floating-point drift', async () => {
+    const persistence = memoryPersistence();
+    const auth = new AuthService(persistence, new JwtService({ secret: 'test-secret' }));
+    const user = (await auth.register({ email: 'billing@example.com', password: 'password123', nickname: '结算测试' })).user;
+    const billing = new BillingService(persistence);
+
+    const entries = await billing.settleChatUsage(user.id, [{ model: 'DeepSeek V4 Pro', inputTokens: 4000, outputTokens: 1500 }]);
+
+    expect(entries[0]?.deltaMilli).toBe(-3500);
+    expect(entries[0]?.balanceAfterMilli).toBe(96500);
+    await expect(billing.account(user.id)).resolves.toMatchObject({ balanceMilli: 96500, balance: 96.5 });
   });
 });
 
