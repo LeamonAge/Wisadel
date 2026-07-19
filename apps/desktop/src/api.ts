@@ -1,4 +1,4 @@
-import type { Attachment, AuthResponse, CreateImageTaskInput, Health, ImageAgentAction, ImageTask, Message, SanityAccount, SanityLedgerEntry, SdCapabilities, SdParams, Session, SessionKind, UploadFileResponse, UploadImageResponse } from '@wisadel/contracts';
+import type { AgentTask, Attachment, AuthResponse, CreateAgentTaskInput, CreateImageTaskInput, Health, ImageAgentAction, ImageTask, Message, SanityAccount, SanityLedgerEntry, SdCapabilities, SdParams, Session, SessionKind, UploadFileResponse, UploadImageResponse } from '@wisadel/contracts';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'https://u1056851-8a8f-2f197363.westc.seetacloud.com:8443/api/v1';
 export const AUTH_EXPIRED_EVENT = 'wisadel:auth-expired';
@@ -54,6 +54,9 @@ export class ApiClient {
   createImageTask = (input: CreateImageTaskInput) =>
     this.request<ImageTask>('/image-tasks', { method: 'POST', body: JSON.stringify(input) });
   sdCapabilities = () => this.request<SdCapabilities>('/image-tasks/capabilities');
+  agentTasks = (sessionId?: string) => this.request<AgentTask[]>(`/agent-tasks${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`);
+  createAgentTask = (input: CreateAgentTaskInput) => this.request<AgentTask>('/agent-tasks', { method: 'POST', body: JSON.stringify(input) });
+  retryAgentTask = (id: string) => this.request<AgentTask>(`/agent-tasks/${id}/retry`, { method: 'POST' });
   imageTasks = (sessionId?: string) => this.request<ImageTask[]>(`/image-tasks${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`);
   imageTask = (id: string) => this.request<ImageTask>(`/image-tasks/${id}`);
   cancelImageTask = (id: string) => this.request<ImageTask>(`/image-tasks/${id}/cancel`, { method: 'POST' });

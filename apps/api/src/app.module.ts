@@ -21,6 +21,8 @@ import { ImageStorageService } from './shared/image-storage.service';
 import { AgentToolsService } from './providers/agent-tools.service';
 import { BillingController } from './modules/billing.controller';
 import { BillingService } from './modules/billing.service';
+import { AgentTaskController } from './modules/agent-task.controller';
+import { AgentTaskService } from './modules/agent-task.service';
 
 @Module({
   imports: [
@@ -31,7 +33,7 @@ import { BillingService } from './modules/billing.service';
       signOptions: { expiresIn: '15m' }
     })
   ],
-  controllers: [AuthController, ChatController, ImageController, UploadController, HealthController, AdminController, BillingController],
-  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, AgentToolsService, DeepSeekService, QwenService, AuthService, ChatService, ImageService, BillingService]
+  controllers: [AuthController, ChatController, ImageController, UploadController, HealthController, AdminController, BillingController, AgentTaskController],
+  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, AgentToolsService, DeepSeekService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService]
 })
 export class AppModule {}

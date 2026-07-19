@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { ImageTask, Message, SanityAccount, SanityLedgerEntry, SdParams, Session, SessionKind, User } from '@wisadel/contracts';
-import type { ChatMessage, ChatSession, ImageTask as DbImageTask, SanityLedgerEntry as DbSanityLedgerEntry, User as DbUser } from '@prisma/client';
+import type { AgentTask, AgentTaskStep, Attachment, ImageTask, Message, SanityAccount, SanityLedgerEntry, SdParams, Session, SessionKind, User } from '@wisadel/contracts';
+import type { AgentTask as DbAgentTask, AgentTaskStep as DbAgentTaskStep, ChatMessage, ChatSession, ImageTask as DbImageTask, SanityLedgerEntry as DbSanityLedgerEntry, User as DbUser } from '@prisma/client';
 import { MemoryStore, type StoredUser } from './memory.store';
 import { PrismaService } from './prisma.service';
 
@@ -204,6 +204,66 @@ export class PersistenceService {
     await this.prisma.imageTask.update({ where: { id }, data: { ...(data.status ? { status: data.status.toUpperCase() as any } : {}), ...(data.progress !== undefined ? { progress: data.progress } : {}), ...(data.params ? { params: data.params as any } : {}), ...(data.resultUrls ? { resultUrls: data.resultUrls } : {}), ...(data.errorCode !== undefined ? { errorCode: data.errorCode } : {}), ...(data.errorMessage !== undefined ? { errorMessage: data.errorMessage } : {}) } });
   }
 
+  async createAgentTask(userId: string, input: { sessionId: string; content: string; imageUrls: string[]; attachments: Attachment[]; retryOfId?: string | null }): Promise<AgentTask> {
+    const now = new Date().toISOString();
+    const steps: AgentTaskStep[] = [
+      { id: crypto.randomUUID(), position: 0, title: '理解目标与制定计划', status: 'queued', detail: null },
+      { id: crypto.randomUUID(), position: 1, title: '执行任务与调用工具', status: 'queued', detail: null },
+      { id: crypto.randomUUID(), position: 2, title: '整理结果与交付', status: 'queued', detail: null }
+    ];
+    if (!this.integrated) {
+      const task: AgentTask & { userId: string; imageUrls: string[]; attachments: Attachment[] } = { id: crypto.randomUUID(), userId, sessionId: input.sessionId, content: input.content, imageUrls: input.imageUrls, attachments: input.attachments, status: 'queued', errorMessage: null, retryOfId: input.retryOfId ?? null, steps, createdAt: now, updatedAt: now };
+      this.memory.agentTasks.set(task.id, task);
+      return task;
+    }
+    const task = await this.prisma.agentTask.create({ data: { userId, sessionId: input.sessionId, content: input.content, imageUrls: input.imageUrls, attachments: input.attachments as any, retryOfId: input.retryOfId, steps: { create: steps.map((step) => ({ position: step.position, title: step.title })) } }, include: { steps: { orderBy: { position: 'asc' } } } });
+    return this.publicAgentTask(task);
+  }
+
+  async listAgentTasks(userId: string, sessionId?: string): Promise<AgentTask[]> {
+    if (!this.integrated) return [...this.memory.agentTasks.values()].filter((task) => task.userId === userId && (!sessionId || task.sessionId === sessionId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const tasks = await this.prisma.agentTask.findMany({ where: { userId, ...(sessionId ? { sessionId } : {}) }, include: { steps: { orderBy: { position: 'asc' } } }, orderBy: { createdAt: 'desc' } });
+    return tasks.map((task) => this.publicAgentTask(task));
+  }
+
+  async findAgentTask(userId: string, id: string): Promise<AgentTask | null> {
+    if (!this.integrated) { const task = this.memory.agentTasks.get(id); return task?.userId === userId ? task : null; }
+    const task = await this.prisma.agentTask.findFirst({ where: { id, userId }, include: { steps: { orderBy: { position: 'asc' } } } });
+    return task ? this.publicAgentTask(task) : null;
+  }
+
+  async findAgentTaskInternal(id: string): Promise<(AgentTask & { userId: string; imageUrls: string[]; attachments: Attachment[] }) | null> {
+    if (!this.integrated) return this.memory.agentTasks.get(id) ?? null;
+    const task = await this.prisma.agentTask.findUnique({ where: { id }, include: { steps: { orderBy: { position: 'asc' } } } });
+    return task ? { ...this.publicAgentTask(task), userId: task.userId, imageUrls: task.imageUrls as string[], attachments: task.attachments as Attachment[] } : null;
+  }
+
+  async updateAgentTask(id: string, data: { status?: AgentTask['status']; errorMessage?: string | null }) {
+    if (!this.integrated) { const task = this.memory.agentTasks.get(id); if (task) Object.assign(task, data, { updatedAt: new Date().toISOString() }); return; }
+    await this.prisma.agentTask.update({ where: { id }, data: { ...(data.status ? { status: data.status.toUpperCase() as any } : {}), ...(data.errorMessage !== undefined ? { errorMessage: data.errorMessage } : {}) } });
+  }
+
+  async updateAgentStep(taskId: string, position: number, data: { status?: AgentTaskStep['status']; detail?: string | null }) {
+    if (!this.integrated) { const step = this.memory.agentTasks.get(taskId)?.steps.find((item) => item.position === position); if (step) Object.assign(step, data); return; }
+    await this.prisma.agentTaskStep.update({ where: { taskId_position: { taskId, position } }, data: { ...(data.status ? { status: data.status.toUpperCase() as any } : {}), ...(data.detail !== undefined ? { detail: data.detail?.slice(0, 4000) ?? null } : {}) } });
+  }
+
+  async resetAgentTask(userId: string, id: string): Promise<AgentTask | null> {
+    const task = await this.findAgentTask(userId, id);
+    if (!task || task.status !== 'failed') return null;
+    if (!this.integrated) {
+      const stored = this.memory.agentTasks.get(id)!;
+      stored.status = 'queued'; stored.errorMessage = null; stored.updatedAt = new Date().toISOString();
+      stored.steps = stored.steps.map((step) => ({ ...step, status: 'queued', detail: null }));
+      return stored;
+    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.agentTaskStep.updateMany({ where: { taskId: id }, data: { status: 'QUEUED', detail: null } });
+      return tx.agentTask.update({ where: { id }, data: { status: 'QUEUED', errorMessage: null }, include: { steps: { orderBy: { position: 'asc' } } } });
+    });
+    return this.publicAgentTask(updated);
+  }
+
   async adminOverview() {
     if (!this.integrated) { const tasks = [...this.memory.imageTasks.values()]; return { users: this.memory.users.size, sessions: this.memory.sessions.size, queuedTasks: tasks.filter((x) => x.status === 'queued').length, processingTasks: tasks.filter((x) => x.status === 'processing').length, completedTasks: tasks.filter((x) => x.status === 'succeeded').length }; }
     const [users, sessions, queuedTasks, processingTasks, completedTasks] = await Promise.all([this.prisma.user.count(), this.prisma.chatSession.count({ where: { deletedAt: null } }), this.prisma.imageTask.count({ where: { status: 'QUEUED' } }), this.prisma.imageTask.count({ where: { status: 'PROCESSING' } }), this.prisma.imageTask.count({ where: { status: 'SUCCEEDED' } })]);
@@ -220,6 +280,7 @@ export class PersistenceService {
   private publicSession(session: ChatSession | (Session & { userId: string }), preview = '开始新的会话'): Session { return { id: session.id, title: session.title, kind: session.kind.toString().toLowerCase() as SessionKind, model: session.model, preview: 'preview' in session ? session.preview : preview, updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : session.updatedAt }; }
   private publicMessage(message: ChatMessage): Message { const metadata = (message.metadata ?? {}) as any; return { id: message.id, clientId: message.clientId, sessionId: message.sessionId, role: message.role.toLowerCase() as Message['role'], content: message.content, status: 'sent', imageUrls: metadata.imageUrls ?? [], attachments: metadata.attachments ?? [], createdAt: message.createdAt.toISOString() }; }
   private publicImageTask(task: DbImageTask | (ImageTask & { userId: string; clientId: string })): ImageTask { return { id: task.id, sessionId: task.sessionId, status: task.status.toString().toLowerCase() as ImageTask['status'], progress: task.progress, params: task.params as SdParams, resultUrls: Array.isArray(task.resultUrls) ? task.resultUrls as string[] : [], errorCode: task.errorCode, errorMessage: task.errorMessage, retryOfId: task.retryOfId, createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt, updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt }; }
+  private publicAgentTask(task: DbAgentTask & { steps: DbAgentTaskStep[] }): AgentTask { return { id: task.id, sessionId: task.sessionId, content: task.content, status: task.status.toLowerCase() as AgentTask['status'], errorMessage: task.errorMessage, retryOfId: task.retryOfId, steps: task.steps.map((step) => ({ id: step.id, position: step.position, title: step.title, status: step.status.toLowerCase() as AgentTaskStep['status'], detail: step.detail })), createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString() }; }
   private publicSanityAccount(balanceMilli: number): SanityAccount { return { balanceMilli, balance: balanceMilli / 1000, unit: 'sanity' }; }
   private publicSanityLedgerEntry(entry: DbSanityLedgerEntry): SanityLedgerEntry { return { id: entry.id, deltaMilli: entry.deltaMilli, balanceAfterMilli: entry.balanceAfterMilli, inputTokens: entry.inputTokens, outputTokens: entry.outputTokens, model: entry.model, description: entry.description, createdAt: entry.createdAt.toISOString() }; }
 }

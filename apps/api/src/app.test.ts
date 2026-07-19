@@ -69,6 +69,23 @@ describe('BillingService', () => {
   });
 });
 
+describe('Agent task persistence', () => {
+  it('persists a three-step plan and resets a failed task for recovery', async () => {
+    const persistence = memoryPersistence();
+    const userId = crypto.randomUUID();
+    const session = await persistence.createSession(userId, { kind: 'chat', title: '后台任务', model: 'DeepSeek' });
+    const task = await persistence.createAgentTask(userId, { sessionId: session.id, content: '整理这个项目并运行测试', imageUrls: [], attachments: [] });
+    expect(task.steps).toHaveLength(3);
+    await persistence.updateAgentTask(task.id, { status: 'failed', errorMessage: '网络中断' });
+    await persistence.updateAgentStep(task.id, 1, { status: 'failed', detail: '网络中断' });
+
+    const reset = await persistence.resetAgentTask(userId, task.id);
+
+    expect(reset).toMatchObject({ status: 'queued', errorMessage: null });
+    expect(reset?.steps.every((step) => step.status === 'queued' && step.detail === null)).toBe(true);
+  });
+});
+
 describe('DeepSeekService', () => {
   const originalMode = process.env.AI_MODE;
   const originalKey = process.env.DEEPSEEK_API_KEY;

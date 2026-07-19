@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   Blocks, Bot, ChevronDown, CircleUserRound, CloudOff, Download, Ellipsis, Eye, Image as ImageIcon,
-  FileText, ImagePlus, Layers3, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RotateCcw,
+  FileText, ImagePlus, Layers3, ListTodo, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RotateCcw,
   Scissors,
   ScanEye, Search, Send, Settings, SlidersHorizontal, Sparkles, Square, Trash2, Upload,
   WandSparkles, X, Zap
 } from 'lucide-react';
-import type { SanityAccount, SanityLedgerEntry, SdParams, Session } from '@wisadel/contracts';
+import type { AgentTask, SanityAccount, SanityLedgerEntry, SdParams, Session } from '@wisadel/contracts';
 import { useAppStore } from '../store';
 import { api } from '../api';
 
@@ -174,10 +174,13 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
   const removePending = useAppStore((state) => state.removePendingImage);
   const attachImage = useAppStore((state) => state.attachImage);
   const previewImage = useAppStore((state) => state.setPreviewImage);
+  const reloadSession = useAppStore((state) => state.selectSession);
   const [input, setInput] = useState('');
   const [capturing, setCapturing] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [showReturnBottom, setShowReturnBottom] = useState(false);
+  const [backgroundStarting, setBackgroundStarting] = useState(false);
+  const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -187,6 +190,14 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, streaming]);
   useEffect(() => { setInput(''); }, [page, activeId]);
+  useEffect(() => {
+    if (page !== 'chat' || !activeId) { setAgentTasks([]); return; }
+    let active = true;
+    const refresh = async () => { try { const tasks = await api.agentTasks(activeId); if (active) setAgentTasks(tasks); } catch { /* offline state is already surfaced elsewhere */ } };
+    void refresh();
+    const timer = window.setInterval(refresh, 2200);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [page, activeId]);
   const submit = () => {
     if (sending || uploading) return;
     const hasFiles = pendingImages.length || pendingAttachments.length;
@@ -196,6 +207,18 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
     void send(value);
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } };
+  const startBackgroundTask = async () => {
+    const value = input.trim();
+    if (!value || !activeId || page !== 'chat' || backgroundStarting) return;
+    setBackgroundStarting(true); setCaptureError(null);
+    try {
+      const task = await api.createAgentTask({ sessionId: activeId, content: value, imageUrls: pendingImages, attachments: pendingAttachments });
+      setInput('');
+      setAgentTasks((items) => [task, ...items]);
+      await reloadSession(activeId);
+    } catch (error) { setCaptureError(error instanceof Error ? error.message : '无法创建后台任务');
+    } finally { setBackgroundStarting(false); }
+  };
   const captureScreen = async () => {
     if (capturing || pendingImages.length >= 4) return;
     setCapturing(true); setCaptureError(null);
@@ -218,11 +241,18 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
       {messages.map((message) => <div key={message.id} className={`message ${message.role}`}><div className="message-avatar">{message.role === 'user' ? <CircleUserRound size={18} /> : <Sparkles size={17} />}</div><div className="message-body"><div className="message-meta">{message.role === 'user' ? '你' : page === 'chat' ? 'Wisadel' : '创意画师'}<span>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div><div className="message-content">{message.content}</div>{!!message.imageUrls.length && <div className="message-images">{message.imageUrls.map((url) => <div className="message-image" key={url}><button onClick={() => previewImage(url)} title="查看大图"><img src={url} alt="消息图片" /></button>{page === 'image' && <button className="analyze-image" onClick={() => attachImage(url)} title="交给千问分析"><ScanEye size={14} />分析</button>}</div>)}</div>}{!!message.attachments?.length && <div className="message-files">{message.attachments.map((file) => <a href={file.url} target="_blank" rel="noreferrer" key={file.url}><FileText size={15} /><span>{file.name}</span><small>{Math.max(1, Math.ceil(file.size / 1024))} KB</small></a>)}</div>}{message.status === 'failed' && <span className="message-error">{sendError ?? '发送失败，请重试'}</span>}</div></div>)}
       {!!reasoningSteps.length && <details className="reasoning-panel" open={!reasoningCollapsed}><summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}><Sparkles size={14} />{sending ? '正在思考与执行' : '思考与执行过程'}</summary><div>{reasoningSteps.map((step, index) => <p key={`${step}-${index}`}>{step}</p>)}</div></details>}
       {streaming && <div className="message assistant"><div className="message-avatar"><Sparkles size={17} /></div><div className="message-body"><div className="message-meta">Wisadel<span>正在输入</span></div><div className="message-content streaming">{streaming}</div></div></div>}
+      {page === 'chat' && <AgentTaskPanel tasks={agentTasks} onRetry={async (id) => { const task = await api.retryAgentTask(id); setAgentTasks((items) => items.map((item) => item.id === id ? task : item)); }} />}
       <div ref={endRef} />
     </div>
     {showReturnBottom && <button className="return-bottom" onClick={returnToBottom}><ChevronDown size={16} />回到底部</button>}
-    <div className="composer-wrap"><div className="composer">{!!pendingImages.length && <div className="pending-images">{pendingImages.map((url) => <div key={url}><img src={url} alt="待发送图片" /><button type="button" onClick={() => removePending(url)} title="移除图片"><X size={13} /></button></div>)}</div>}{!!pendingAttachments.length && <div className="pending-files">{pendingAttachments.map((file) => <div key={file.url}><FileText size={15} /><span>{file.name}</span><button type="button" onClick={() => removeAttachment(file.url)} title="移除文件"><X size={13} /></button></div>)}</div>}<textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keyDown} placeholder={page === 'chat' ? '输入消息，或上传本地文件...' : '描述画面，或上传图片和文件让千问分析...'} rows={1} /><div className="composer-footer"><div className="composer-tools"><input ref={uploadRef} type="file" accept={page === 'image' ? 'image/*,.txt,.md,.json,.csv,.pdf' : undefined} hidden multiple onChange={(event) => { for (const file of Array.from(event.target.files ?? []).slice(0, 8 - pendingAttachments.length)) void uploadFile(file); event.target.value = ''; }} /><button type="button" className="attach-command" onClick={() => uploadRef.current?.click()} disabled={uploading || pendingAttachments.length >= 8} title="上传本地文件"><Paperclip size={16} /></button><button type="button" className="capture-command" onClick={() => void captureScreen()} disabled={capturing || pendingImages.length >= 4} title="截取当前屏幕并附加"><Scissors size={16} /></button><span>{capturing ? '正在截取屏幕' : uploading ? '正在上传文件' : 'Enter 发送 · Shift + Enter 换行'}</span></div><button type="button" className="send-command" onClick={submit} disabled={(!input.trim() && !pendingImages.length && !pendingAttachments.length) || sending || uploading || !activeId} aria-label="发送消息" title="发送消息">{sending ? <Square size={16} /> : <Send size={17} />}</button></div>{(sendError || captureError) && <div className="composer-error">{sendError ?? captureError}</div>}</div></div>
+    <div className="composer-wrap"><div className="composer">{!!pendingImages.length && <div className="pending-images">{pendingImages.map((url) => <div key={url}><img src={url} alt="待发送图片" /><button type="button" onClick={() => removePending(url)} title="移除图片"><X size={13} /></button></div>)}</div>}{!!pendingAttachments.length && <div className="pending-files">{pendingAttachments.map((file) => <div key={file.url}><FileText size={15} /><span>{file.name}</span><button type="button" onClick={() => removeAttachment(file.url)} title="移除文件"><X size={13} /></button></div>)}</div>}<textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keyDown} placeholder={page === 'chat' ? '输入消息，或上传本地文件...' : '描述画面，或上传图片和文件让千问分析...'} rows={1} /><div className="composer-footer"><div className="composer-tools"><input ref={uploadRef} type="file" accept={page === 'image' ? 'image/*,.txt,.md,.json,.csv,.pdf' : undefined} hidden multiple onChange={(event) => { for (const file of Array.from(event.target.files ?? []).slice(0, 8 - pendingAttachments.length)) void uploadFile(file); event.target.value = ''; }} /><button type="button" className="attach-command" onClick={() => uploadRef.current?.click()} disabled={uploading || pendingAttachments.length >= 8} title="上传本地文件"><Paperclip size={16} /></button><button type="button" className="capture-command" onClick={() => void captureScreen()} disabled={capturing || pendingImages.length >= 4} title="截取当前屏幕并附加"><Scissors size={16} /></button>{page === 'chat' && <button type="button" className="background-command" onClick={() => void startBackgroundTask()} disabled={!input.trim() || backgroundStarting || sending} title="放入后台任务队列"><ListTodo size={16} /></button>}<span>{backgroundStarting ? '正在创建后台任务' : capturing ? '正在截取屏幕' : uploading ? '正在上传文件' : 'Enter 发送 · Shift + Enter 换行'}</span></div><button type="button" className="send-command" onClick={submit} disabled={(!input.trim() && !pendingImages.length && !pendingAttachments.length) || sending || uploading || !activeId} aria-label="发送消息" title="发送消息">{sending ? <Square size={16} /> : <Send size={17} />}</button></div>{(sendError || captureError) && <div className="composer-error">{sendError ?? captureError}</div>}</div></div>
   </section>;
+}
+
+function AgentTaskPanel({ tasks, onRetry }: { tasks: AgentTask[]; onRetry: (id: string) => Promise<void> }) {
+  const visible = tasks.slice(0, 3);
+  if (!visible.length) return null;
+  return <section className="agent-task-panel"><header><div><ListTodo size={15} /><strong>后台任务</strong></div><span>关闭窗口后仍会继续</span></header>{visible.map((task) => <article className={`agent-task ${task.status}`} key={task.id}><div className="agent-task-heading"><strong>{task.content}</strong><span>{({ queued: '排队中', running: '执行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' } as Record<string, string>)[task.status]}</span></div><ol>{task.steps.map((step) => <li className={step.status} key={step.id}><i /> <div><strong>{step.title}</strong>{step.detail && <span>{step.detail}</span>}</div></li>)}</ol>{task.status === 'failed' && <footer><span>{task.errorMessage ?? '后台任务失败'}</span><button onClick={() => void onRetry(task.id)}><RotateCcw size={13} />重试</button></footer>}</article>)}</section>;
 }
 
 function ImageInspector() {

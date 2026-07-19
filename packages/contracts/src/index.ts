@@ -145,6 +145,33 @@ export const imageTaskStatusSchema = z.enum([
   'cancelled'
 ]);
 
+export const agentTaskStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']);
+export const agentTaskStepStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed']);
+export const agentTaskStepSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1).max(160),
+  status: agentTaskStepStatusSchema,
+  detail: z.string().nullable(),
+  position: z.number().int().min(0)
+});
+export const agentTaskSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  content: z.string().min(1).max(12000),
+  status: agentTaskStatusSchema,
+  errorMessage: z.string().nullable(),
+  retryOfId: z.string().uuid().nullable(),
+  steps: z.array(agentTaskStepSchema),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+export const createAgentTaskInputSchema = z.object({
+  sessionId: z.string().uuid(),
+  content: z.string().trim().min(1).max(12000),
+  imageUrls: z.array(z.string().url()).max(4).default([]),
+  attachments: z.array(attachmentSchema).max(8).default([])
+});
+
 export const imageTaskSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().uuid(),
@@ -218,6 +245,10 @@ export type SdLora = z.infer<typeof sdLoraSchema>;
 export type ImageMode = z.infer<typeof imageModeSchema>;
 export type ImageTask = z.infer<typeof imageTaskSchema>;
 export type ImageTaskStatus = z.infer<typeof imageTaskStatusSchema>;
+export type AgentTask = z.infer<typeof agentTaskSchema>;
+export type AgentTaskStep = z.infer<typeof agentTaskStepSchema>;
+export type AgentTaskStatus = z.infer<typeof agentTaskStatusSchema>;
+export type CreateAgentTaskInput = z.infer<typeof createAgentTaskInputSchema>;
 export type CreateImageTaskInput = z.infer<typeof createImageTaskInputSchema>;
 export type UploadImageResponse = z.infer<typeof uploadImageResponseSchema>;
 export type UploadFileResponse = z.infer<typeof uploadFileResponseSchema>;

@@ -32,6 +32,21 @@ enum ImageTaskStatus {
   CANCELLED
 }
 
+enum AgentTaskStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum AgentTaskStepStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 model User {
   id           String         @id @default(uuid()) @db.Uuid
   email        String         @unique @db.VarChar(255)
@@ -47,6 +62,7 @@ model User {
   imageTasks   ImageTask[]
   sanityMilli  Int            @default(100000) @map("sanity_milli")
   sanityLedger SanityLedgerEntry[]
+  agentTasks   AgentTask[]
 
   @@map("users")
 }
@@ -93,6 +109,7 @@ model ChatSession {
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  ChatMessage[]
   imageTasks ImageTask[]
+  agentTasks AgentTask[]
 
   @@index([userId, kind, updatedAt(sort: Desc)])
   @@map("chat_sessions")
@@ -134,4 +151,38 @@ model ImageTask {
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt])
   @@map("image_tasks")
+}
+
+model AgentTask {
+  id           String          @id @default(uuid()) @db.Uuid
+  userId       String          @map("user_id") @db.Uuid
+  sessionId    String          @map("session_id") @db.Uuid
+  content      String          @db.Text
+  imageUrls    Json            @default("[]") @map("image_urls")
+  attachments  Json            @default("[]")
+  status       AgentTaskStatus @default(QUEUED)
+  errorMessage String?         @map("error_message") @db.Text
+  retryOfId    String?         @map("retry_of_id") @db.Uuid
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session      ChatSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  steps        AgentTaskStep[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("agent_tasks")
+}
+
+model AgentTaskStep {
+  id          String              @id @default(uuid()) @db.Uuid
+  taskId      String              @map("task_id") @db.Uuid
+  position    Int
+  title       String              @db.VarChar(160)
+  status      AgentTaskStepStatus @default(QUEUED)
+  detail      String?             @db.Text
+  task        AgentTask           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, position])
+  @@map("agent_task_steps")
 }
