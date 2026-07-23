@@ -1,5 +1,6 @@
 import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { appendFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 let mainWindow: BrowserWindow | null = null;
@@ -29,7 +30,17 @@ const createTray = () => {
 
 const sendUpdate = (payload: object) => {
   lastUpdateEvent = payload;
+  try {
+    appendFileSync(path.join(app.getPath('userData'), 'updater.log'), `${new Date().toISOString()} ${JSON.stringify(payload)}\n`);
+  } catch {
+    // Updating must continue even when the diagnostic log cannot be written.
+  }
   mainWindow?.webContents.send('wisadel:update', payload);
+};
+
+const clearUpdaterCache = () => {
+  const cacheDirectory = path.join(process.env.LOCALAPPDATA ?? app.getPath('appData'), `${app.getName()}-updater`);
+  rmSync(cacheDirectory, { recursive: true, force: true, maxRetries: 2 });
 };
 
 const configureAutoUpdate = () => {
@@ -101,8 +112,28 @@ const openImageStudio = () => {
 };
 
 app.whenReady().then(() => {
-  ipcMain.handle('wisadel:update:download', () => autoUpdater.downloadUpdate());
-  ipcMain.handle('wisadel:update:install', () => autoUpdater.quitAndInstall(false, true));
+  ipcMain.handle('wisadel:update:download', async () => {
+    try {
+      // A failed NSIS download can leave an old installer in this cache and make every retry fail.
+      clearUpdaterCache();
+      await autoUpdater.downloadUpdate();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      sendUpdate({ type: 'error', message });
+      throw error;
+    }
+  });
+  ipcMain.handle('wisadel:update:install', async () => {
+    try {
+      quitting = true;
+      autoUpdater.quitAndInstall(false, true);
+    } catch (error) {
+      quitting = false;
+      const message = error instanceof Error ? error.message : String(error);
+      sendUpdate({ type: 'error', message });
+      throw error;
+    }
+  });
   ipcMain.handle('wisadel:open-image-studio', openImageStudio);
   ipcMain.handle('wisadel:capture-screen', async () => {
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1920, height: 1080 } });

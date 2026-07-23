@@ -1,6 +1,6 @@
 import type { AgentTask, Attachment, AuthResponse, CreateAgentTaskInput, CreateImageTaskInput, Health, ImageAgentAction, ImageTask, Message, SanityAccount, SanityLedgerEntry, SdCapabilities, SdParams, Session, SessionKind, UploadFileResponse, UploadImageResponse } from '@wisadel/contracts';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'https://u1056851-8a8f-2f197363.westc.seetacloud.com:8443/api/v1';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000/api/v1';
 export const AUTH_EXPIRED_EVENT = 'wisadel:auth-expired';
 
 export class ApiClient {
