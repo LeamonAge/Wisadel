@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import type { AuthResponse } from '@wisadel/contracts';
 import { api, AUTH_EXPIRED_EVENT } from './api';
 import { LoginPage } from './pages/LoginPage';
@@ -18,7 +18,7 @@ export function App() {
   const [restoring, setRestoring] = useState(true);
   const [update, setUpdate] = useState<{ type: string; version?: string; notes?: string; percent?: number; message?: string } | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let mounted = true;
     const expire = () => {
       localStorage.removeItem('wisadel.user');
@@ -54,7 +54,7 @@ export function App() {
     document.documentElement.style.setProperty('--workspace-opacity', String(workspaceOpacity / 100));
     document.documentElement.style.setProperty('--conversation-opacity', String(conversationOpacity / 100));
     document.documentElement.style.setProperty('--custom-background', backgroundUrl ? `url("${backgroundUrl}")` : 'none');
-    void window.wisadelDesktop?.setTheme(theme);
+    window.wisadelDesktop?.setTheme(theme);
   }, [theme, workspaceOpacity, conversationOpacity, backgroundUrl]);
 
   useEffect(() => window.wisadelUpdater?.onEvent(setUpdate), []);

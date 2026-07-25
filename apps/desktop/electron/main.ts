@@ -8,6 +8,11 @@ let imageStudioWindow: BrowserWindow | null = null;
 let lastUpdateEvent: object | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+const updateWindowChrome = (window: BrowserWindow | null, theme: 'dark' | 'light') => {
+  if (!window || window.isDestroyed()) return;
+  const palette = theme === 'light' ? { color: '#ffffff', symbolColor: '#3d2a27' } : { color: '#120b0b', symbolColor: '#d7cece' };
+  window.setTitleBarOverlay({ ...palette, height: 38 });
+};
 
 const showWindow = () => {
   if (!mainWindow) return;
@@ -118,11 +123,8 @@ app.whenReady().then(() => {
     writeFileSync(path.join(app.getPath('userData'), `provider-secret-${providerId}.dat`), encrypted, { mode: 0o600 });
   });
   ipcMain.handle('wisadel:set-theme', (_event, theme: 'dark' | 'light') => {
-    const palette = theme === 'light'
-      ? { color: '#ffffff', symbolColor: '#3d2a27' }
-      : { color: '#120b0b', symbolColor: '#d7cece' };
-    mainWindow?.setTitleBarOverlay({ ...palette, height: 38 });
-    imageStudioWindow?.setTitleBarOverlay({ ...palette, height: 38 });
+    updateWindowChrome(mainWindow, theme);
+    updateWindowChrome(imageStudioWindow, theme);
   });
   ipcMain.handle('wisadel:update:download', async () => {
     try {
