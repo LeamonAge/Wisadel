@@ -7,5 +7,7 @@ interface Window {
   wisadelDesktop?: {
     openImageStudio: () => Promise<void>;
     captureScreen: () => Promise<string>;
+    setTheme: (theme: 'dark' | 'light') => Promise<void>;
+    setProviderSecret: (providerId: string, secret: string) => Promise<void>;
   };
 }

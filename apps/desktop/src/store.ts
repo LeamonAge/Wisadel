@@ -32,11 +32,19 @@ const withSdDefaults = (params: Partial<SdParams>): SdParams => ({
 
 type Page = SessionKind | 'models' | 'extensions' | 'plugins';
 type Theme = 'dark' | 'light';
+export type Language = 'zh-CN' | 'zh-TW' | 'en';
+export type ProviderConfig = { id: string; name: string; baseUrl: string; models: string[]; hasKey: boolean };
 
 interface AppState {
   user: User | null;
   theme: Theme;
   autoGenerate: boolean;
+  localFileAccess: boolean;
+  language: Language;
+  workspaceOpacity: number;
+  conversationOpacity: number;
+  backgroundUrl: string | null;
+  providers: ProviderConfig[];
   page: Page;
   online: boolean;
   sessions: Session[];
@@ -62,6 +70,10 @@ interface AppState {
   setUser: (user: User | null) => void;
   setTheme: (theme: Theme) => void;
   setAutoGenerate: (enabled: boolean) => void;
+  setLocalFileAccess: (enabled: boolean) => void;
+  setLanguage: (language: Language) => void;
+  setAppearance: (settings: Partial<Pick<AppState, 'workspaceOpacity' | 'conversationOpacity' | 'backgroundUrl'>>) => void;
+  setProviders: (providers: ProviderConfig[]) => void;
   setPage: (page: Page) => Promise<void>;
   loadSessions: (kind?: SessionKind) => Promise<void>;
   createSession: () => Promise<void>;
@@ -102,6 +114,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   theme: (localStorage.getItem('wisadel.theme') as Theme | null) ?? 'dark',
   autoGenerate: localStorage.getItem('wisadel.autoGenerate') === 'true',
+  localFileAccess: localStorage.getItem('wisadel.localFileAccess') === 'true',
+  language: (localStorage.getItem('wisadel.language') as Language | null) ?? 'zh-CN',
+  workspaceOpacity: Number(localStorage.getItem('wisadel.workspaceOpacity') ?? '96'),
+  conversationOpacity: Number(localStorage.getItem('wisadel.conversationOpacity') ?? '96'),
+  backgroundUrl: localStorage.getItem('wisadel.backgroundUrl'),
+  providers: JSON.parse(localStorage.getItem('wisadel.providers') ?? '[]') as ProviderConfig[],
   page: 'chat',
   online: navigator.onLine,
   sessions: [],
@@ -150,6 +168,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem('wisadel.autoGenerate', String(autoGenerate));
     set({ autoGenerate });
   },
+  setLocalFileAccess: (localFileAccess) => { localStorage.setItem('wisadel.localFileAccess', String(localFileAccess)); set({ localFileAccess }); },
+  setLanguage: (language) => { localStorage.setItem('wisadel.language', language); set({ language }); },
+  setAppearance: (settings) => {
+    if (settings.workspaceOpacity !== undefined) localStorage.setItem('wisadel.workspaceOpacity', String(settings.workspaceOpacity));
+    if (settings.conversationOpacity !== undefined) localStorage.setItem('wisadel.conversationOpacity', String(settings.conversationOpacity));
+    if (settings.backgroundUrl !== undefined) settings.backgroundUrl ? localStorage.setItem('wisadel.backgroundUrl', settings.backgroundUrl) : localStorage.removeItem('wisadel.backgroundUrl');
+    set(settings);
+  },
+  setProviders: (providers) => { localStorage.setItem('wisadel.providers', JSON.stringify(providers)); set({ providers }); },
   setPage: async (page) => {
     if (page === get().page) return;
     stopImagePoll();
@@ -231,9 +258,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({ sessions: state.sessions.map((item) => item.id === id ? session : item) }));
   },
   sendMessage: async (content, imageUrls = get().pendingImageUrls, attachments = get().pendingAttachments) => {
-    const sessionId = get().activeSessionId;
     const originPage = get().page;
-    if (!sessionId || get().sending || inFlightSessions.has(sessionId) || !conversational(originPage)) return;
+    if (!conversational(originPage)) return;
+    if (!get().activeSessionId) await get().createSession();
+    const sessionId = get().activeSessionId;
+    if (!sessionId || get().sending || inFlightSessions.has(sessionId)) return;
     inFlightSessions.add(sessionId);
     const isCurrent = () => get().activeSessionId === sessionId && get().page === originPage;
     const optimistic: Message = {

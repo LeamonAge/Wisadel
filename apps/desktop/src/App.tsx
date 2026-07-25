@@ -11,6 +11,9 @@ export function App() {
   const loadSessions = useAppStore((state) => state.loadSessions);
   const setPage = useAppStore((state) => state.setPage);
   const theme = useAppStore((state) => state.theme);
+  const workspaceOpacity = useAppStore((state) => state.workspaceOpacity);
+  const conversationOpacity = useAppStore((state) => state.conversationOpacity);
+  const backgroundUrl = useAppStore((state) => state.backgroundUrl);
   const imageStudio = new URLSearchParams(window.location.search).get('workspace') === 'image';
   const [restoring, setRestoring] = useState(true);
   const [update, setUpdate] = useState<{ type: string; version?: string; notes?: string; percent?: number; message?: string } | null>(null);
@@ -48,7 +51,11 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-  }, [theme]);
+    document.documentElement.style.setProperty('--workspace-opacity', String(workspaceOpacity / 100));
+    document.documentElement.style.setProperty('--conversation-opacity', String(conversationOpacity / 100));
+    document.documentElement.style.setProperty('--custom-background', backgroundUrl ? `url("${backgroundUrl}")` : 'none');
+    void window.wisadelDesktop?.setTheme(theme);
+  }, [theme, workspaceOpacity, conversationOpacity, backgroundUrl]);
 
   useEffect(() => window.wisadelUpdater?.onEvent(setUpdate), []);
 

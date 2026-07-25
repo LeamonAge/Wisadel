@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
-  Blocks, Bot, ChevronDown, CircleUserRound, CloudOff, Download, Ellipsis, Eye, Image as ImageIcon,
+  Blocks, Bot, ChevronDown, CircleUserRound, Download, Ellipsis, Eye, Image as ImageIcon,
   FileText, ImagePlus, Layers3, ListTodo, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RotateCcw,
   Scissors,
   ScanEye, Search, Send, Settings, SlidersHorizontal, Sparkles, Square, Trash2, Upload,
@@ -60,9 +60,9 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
   return (
     <main className="app-shell">
       <header className="titlebar">
-        <div className="account-summary"><div className="avatar">{user.nickname.slice(0, 1).toUpperCase()}</div><div><strong>{user.nickname}</strong><span>{user.role === 'admin' ? '管理员' : '内测用户'}</span></div></div>
+        <AccountMenu user={user} onLogout={onLogout} />
         <div className="titlebar-center"><span className="status-dot" />{standaloneImage ? 'Stable Diffusion AI' : 'Wisadel Preview'}</div>
-        <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge"><CloudOff size={14} />离线</span>}<button className="icon-button" onClick={onLogout} title="退出登录"><LogOut size={17} /></button></div>
+        <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge">离线</span>}</div>
       </header>
       <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''} ${standaloneImage ? 'standalone-image' : ''} ${sidebarOpen ? '' : 'sidebar-collapsed'}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
         {!standaloneImage && <nav className="rail">
@@ -81,6 +81,11 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
       <ImageViewer />
     </main>
   );
+}
+
+function AccountMenu({ user, onLogout }: { user: { nickname: string; role: string }; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  return <div className="account-menu"><button className="account-summary" onClick={() => setOpen((value) => !value)} aria-expanded={open} title="账户菜单"><div className="avatar">{user.nickname.slice(0, 1).toUpperCase()}</div><div><strong>{user.nickname}</strong><span>{user.role === 'admin' ? '管理员' : '内测用户'}</span></div><ChevronDown size={14} /></button>{open && <div className="account-popover"><button type="button" onClick={() => setOpen(false)}><CircleUserRound size={16} />账户设置</button><button type="button" onClick={onLogout}><LogOut size={16} />退出登录</button></div>}</div>;
 }
 
 function SanityCenter() {
@@ -331,16 +336,10 @@ function PlaceholderPage({ page }: { page: 'models' | 'extensions' | 'plugins' }
 }
 
 function ModelsCatalog() {
-  const openStudio = () => {
-    if (window.wisadelDesktop) void window.wisadelDesktop.openImageStudio();
-    else void window.open(`${window.location.pathname}?workspace=image`, '_blank', 'noopener');
-  };
   const items = [
-    { title: 'Stable Diffusion AI', tag: '图像生成', description: '进入独立的创作工作台，使用千问协作、Stable Diffusion 参数控制与云端 GPU 生图。', action: openStudio, icon: <WandSparkles size={25} />, ready: true },
-    { title: 'DeepSeek V4 Pro', tag: '对话推理', description: '主对话模型。用于复杂推理、研究、工具执行与长内容协作。', icon: <Bot size={25} />, ready: false },
-    { title: 'Qwen Vision', tag: '多模态', description: '图像理解与创作辅助能力将统一归入此模型中心。', icon: <ScanEye size={25} />, ready: false }
+    { title: '图像能力', tag: '暂未开放', description: '图像工作区正在迁移到统一模型路由。本版本暂不提供 Stable Diffusion 或其他图像模型入口。', icon: <ImageIcon size={25} />, ready: false }
   ];
-  return <section className="placeholder-page models-page"><div className="section-title"><span>MODEL CENTER</span><h1>模型</h1><p>统一管理 Wisadel 可用的对话、视觉、图像生成与后续接入模型。</p></div><div className="model-catalog">{items.map((item) => <button className={`model-card ${item.ready ? 'available' : ''}`} key={item.title} onClick={item.action} disabled={!item.ready}><div className="model-card-icon">{item.icon}</div><div className="model-card-copy"><div><strong>{item.title}</strong><span>{item.tag}</span></div><p>{item.description}</p></div><div className="model-card-action">{item.ready ? '打开工作台' : '即将接入'}</div></button>)}</div></section>;
+  return <section className="placeholder-page models-page"><div className="section-title"><span>MODEL CENTER</span><h1>模型</h1><p>统一管理 Wisadel 可用的对话、视觉、图像生成与后续接入模型。</p></div><div className="model-catalog">{items.map((item) => <button className={`model-card ${item.ready ? 'available' : ''}`} key={item.title} disabled={!item.ready}><div className="model-card-icon">{item.icon}</div><div className="model-card-copy"><div><strong>{item.title}</strong><span>{item.tag}</span></div><p>{item.description}</p></div><div className="model-card-action">暂未开放</div></button>)}</div></section>;
 }
 
 function SettingsDialog() {
@@ -348,8 +347,29 @@ function SettingsDialog() {
   const close = useAppStore((state) => state.setSettingsOpen);
   const theme = useAppStore((state) => state.theme);
   const setTheme = useAppStore((state) => state.setTheme);
-  const autoGenerate = useAppStore((state) => state.autoGenerate);
-  const setAutoGenerate = useAppStore((state) => state.setAutoGenerate);
+  const localFileAccess = useAppStore((state) => state.localFileAccess);
+  const setLocalFileAccess = useAppStore((state) => state.setLocalFileAccess);
+  const language = useAppStore((state) => state.language);
+  const setLanguage = useAppStore((state) => state.setLanguage);
+  const workspaceOpacity = useAppStore((state) => state.workspaceOpacity);
+  const conversationOpacity = useAppStore((state) => state.conversationOpacity);
+  const backgroundUrl = useAppStore((state) => state.backgroundUrl);
+  const setAppearance = useAppStore((state) => state.setAppearance);
+  const providers = useAppStore((state) => state.providers);
+  const setProviders = useAppStore((state) => state.setProviders);
+  const [tab, setTab] = useState<'general' | 'appearance' | 'advanced'>('general');
+  const [providerName, setProviderName] = useState('');
+  const [providerUrl, setProviderUrl] = useState('');
+  const [providerModels, setProviderModels] = useState('');
+  const [providerKey, setProviderKey] = useState('');
+  const addProvider = async () => {
+    const name = providerName.trim(); const baseUrl = providerUrl.trim().replace(/\/$/, ''); const models = providerModels.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+    if (!name || !/^https:\/\//i.test(baseUrl) || !models.length) return;
+    const id = crypto.randomUUID();
+    if (providerKey.trim()) await window.wisadelDesktop?.setProviderSecret(id, providerKey.trim());
+    setProviders([...providers, { id, name, baseUrl, models, hasKey: Boolean(providerKey.trim()) }]);
+    setProviderName(''); setProviderUrl(''); setProviderModels(''); setProviderKey('');
+  };
   if (!open) return null;
-  return <div className="modal-backdrop" onMouseDown={() => close(false)}><section className="settings-dialog" onMouseDown={(event) => event.stopPropagation()}><header><div><span>偏好设置</span><h2>Wisadel 设置</h2></div><button className="icon-button" onClick={() => close(false)}><X size={19} /></button></header><div className="settings-content"><nav><button className="active"><Settings size={17} />常规</button><button><CircleUserRound size={17} />个性化</button><button><SlidersHorizontal size={17} />高级</button></nav><div className="settings-panel"><h3>常规</h3><div className="setting-row"><div><strong>界面主题</strong><span>主题会保存在当前设备。</span></div><div className="theme-switch" role="group" aria-label="界面主题"><button className={theme === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')}>深色</button><button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')}>浅色</button></div></div><div className="setting-row"><div><strong>自动生成</strong><span>{autoGenerate ? '生成请求会直接提交给 Stable Diffusion。' : '关闭后，每次生成前需要手动确认。'}</span></div><button className={autoGenerate ? 'toggle on' : 'toggle'} onClick={() => setAutoGenerate(!autoGenerate)} aria-pressed={autoGenerate} aria-label="自动生成开关"><i /></button></div><div className="setting-row"><div><strong>本地缓存</strong><span>保留最近会话，断网时仍可浏览</span></div><button className="toggle on" aria-label="本地缓存开关"><i /></button></div><div className="setting-note">自定义 API、本地 SD 与自动更新将在后续版本开放。</div></div></div></section></div>;
+  return <div className="modal-backdrop" onMouseDown={() => close(false)}><section className="settings-dialog" onMouseDown={(event) => event.stopPropagation()}><header><div><span>偏好设置</span><h2>Wisadel 设置</h2></div><button className="icon-button" onClick={() => close(false)}><X size={19} /></button></header><div className="settings-content"><nav><button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}><Settings size={17} />常规</button><button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}><CircleUserRound size={17} />个性化</button><button className={tab === 'advanced' ? 'active' : ''} onClick={() => setTab('advanced')}><SlidersHorizontal size={17} />高级</button></nav><div className="settings-panel">{tab === 'general' && <><h3>常规</h3><div className="setting-row"><div><strong>界面主题</strong><span>主题会保存在当前设备。</span></div><div className="theme-switch"><button className={theme === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')}>深色</button><button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')}>浅色</button></div></div><div className="setting-row"><div><strong>允许访问本地文件</strong><span>默认关闭。Agent 每次使用文件、命令或网络工具前都会请求确认。</span></div><button className={localFileAccess ? 'toggle on' : 'toggle'} onClick={() => setLocalFileAccess(!localFileAccess)} aria-pressed={localFileAccess}><i /></button></div><div className="setting-note">访问记录会显示在 Agent 对话中；敏感凭据文件始终被屏蔽。</div></>}{tab === 'appearance' && <><h3>个性化</h3><label className="setting-field">本地背景图<input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) setAppearance({ backgroundUrl: URL.createObjectURL(file) }); }} /></label><button className="text-command" onClick={() => setAppearance({ backgroundUrl: null })} disabled={!backgroundUrl}>移除背景</button><label className="setting-field">工作区透明度 <b>{workspaceOpacity}%</b><input type="range" min="60" max="100" value={workspaceOpacity} onChange={(event) => setAppearance({ workspaceOpacity: Number(event.target.value) })} /></label><label className="setting-field">对话区透明度 <b>{conversationOpacity}%</b><input type="range" min="60" max="100" value={conversationOpacity} onChange={(event) => setAppearance({ conversationOpacity: Number(event.target.value) })} /></label></>}{tab === 'advanced' && <><h3>高级</h3><label className="setting-field">界面语言<select value={language} onChange={(event) => setLanguage(event.target.value as typeof language)}><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="en">English</option></select></label><div className="provider-form"><strong>OpenAI 兼容 API</strong><input value={providerName} onChange={(event) => setProviderName(event.target.value)} placeholder="提供商名称" /><input value={providerUrl} onChange={(event) => setProviderUrl(event.target.value)} placeholder="https://api.example.com/v1" /><input value={providerModels} onChange={(event) => setProviderModels(event.target.value)} placeholder="模型 ID，使用逗号分隔" /><input value={providerKey} onChange={(event) => setProviderKey(event.target.value)} type="password" placeholder="API Key（仅保存到本机安全存储）" /><button className="text-command" onClick={() => void addProvider()}>添加提供商</button></div>{providers.map((provider) => <div className="provider-row" key={provider.id}><div><strong>{provider.name}</strong><span>{provider.models.join(' · ')}</span></div><button onClick={() => setProviders(providers.filter((item) => item.id !== provider.id))}>移除</button></div>)}</>}</div></div></section></div>;
 }

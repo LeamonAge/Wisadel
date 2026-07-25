@@ -1,6 +1,6 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
+import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { appendFileSync, rmSync } from 'node:fs';
+import { appendFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 let mainWindow: BrowserWindow | null = null;
@@ -112,6 +112,18 @@ const openImageStudio = () => {
 };
 
 app.whenReady().then(() => {
+  ipcMain.handle('wisadel:set-provider-secret', (_event, providerId: string, secret: string) => {
+    if (!/^[a-z0-9-]{20,}$/i.test(providerId) || !secret || secret.length > 4096) throw new Error('Invalid provider secret');
+    const encrypted = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(secret).toString('base64') : secret;
+    writeFileSync(path.join(app.getPath('userData'), `provider-secret-${providerId}.dat`), encrypted, { mode: 0o600 });
+  });
+  ipcMain.handle('wisadel:set-theme', (_event, theme: 'dark' | 'light') => {
+    const palette = theme === 'light'
+      ? { color: '#ffffff', symbolColor: '#3d2a27' }
+      : { color: '#120b0b', symbolColor: '#d7cece' };
+    mainWindow?.setTitleBarOverlay({ ...palette, height: 38 });
+    imageStudioWindow?.setTitleBarOverlay({ ...palette, height: 38 });
+  });
   ipcMain.handle('wisadel:update:download', async () => {
     try {
       // A failed NSIS download can leave an old installer in this cache and make every retry fail.
