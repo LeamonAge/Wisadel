@@ -54,7 +54,7 @@ export function App() {
     document.documentElement.style.setProperty('--workspace-opacity', String(workspaceOpacity / 100));
     document.documentElement.style.setProperty('--conversation-opacity', String(conversationOpacity / 100));
     document.documentElement.style.setProperty('--custom-background', backgroundUrl ? `url("${backgroundUrl}")` : 'none');
-    window.wisadelDesktop?.setTheme(theme);
+    void applyBackgroundPalette(backgroundUrl, theme);
   }, [theme, workspaceOpacity, conversationOpacity, backgroundUrl]);
 
   useEffect(() => window.wisadelUpdater?.onEvent(setUpdate), []);
@@ -74,6 +74,42 @@ export function App() {
 
   const content = restoring ? <div className="splash">Wisadel</div> : !user ? <LoginPage onAuthenticated={authenticate} /> : <Workspace onLogout={logout} standaloneImage={imageStudio} />;
   return <>{content}{update && <UpdateDialog update={update} onClose={() => setUpdate(null)} />}</>;
+}
+
+async function applyBackgroundPalette(source: string | null, theme: 'dark' | 'light') {
+  const root = document.documentElement;
+  if (!source) {
+    root.dataset.customBackground = 'false';
+    window.wisadelDesktop?.setTheme(theme);
+    return;
+  }
+  try {
+    const image = new Image();
+    image.src = source;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 32;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return;
+    context.drawImage(image, 0, 0, 32, 32);
+    const pixels = context.getImageData(0, 0, 32, 32).data;
+    let red = 0; let green = 0; let blue = 0; let count = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if ((pixels[index + 3] ?? 0) < 80) continue;
+      red += pixels[index] ?? 0; green += pixels[index + 1] ?? 0; blue += pixels[index + 2] ?? 0; count += 1;
+    }
+    const color = count ? [Math.round(red / count), Math.round(green / count), Math.round(blue / count)] : theme === 'light' ? [255, 255, 255] : [18, 16, 16];
+    const luminance = ((color[0] ?? 0) * 0.2126 + (color[1] ?? 0) * 0.7152 + (color[2] ?? 0) * 0.0722) / 255;
+    const ink = luminance > .58 ? '#211c1b' : '#f8f5f4';
+    root.dataset.customBackground = 'true';
+    root.style.setProperty('--background-rgb', color.join(' '));
+    root.style.setProperty('--background-ink', ink);
+    root.style.setProperty('--background-muted', luminance > .58 ? '#625b58' : '#d0c8c5');
+    window.wisadelDesktop?.setTheme(luminance > .58 ? 'light' : 'dark');
+  } catch {
+    root.dataset.customBackground = 'false';
+    window.wisadelDesktop?.setTheme(theme);
+  }
 }
 
 function UpdateDialog({ update, onClose }: { update: { type: string; version?: string; notes?: string; percent?: number; message?: string }; onClose: () => void }) {

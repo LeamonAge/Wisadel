@@ -173,7 +173,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAppearance: (settings) => {
     if (settings.workspaceOpacity !== undefined) localStorage.setItem('wisadel.workspaceOpacity', String(settings.workspaceOpacity));
     if (settings.conversationOpacity !== undefined) localStorage.setItem('wisadel.conversationOpacity', String(settings.conversationOpacity));
-    if (settings.backgroundUrl !== undefined) settings.backgroundUrl ? localStorage.setItem('wisadel.backgroundUrl', settings.backgroundUrl) : localStorage.removeItem('wisadel.backgroundUrl');
+    if (settings.backgroundUrl !== undefined) {
+      try { settings.backgroundUrl ? localStorage.setItem('wisadel.backgroundUrl', settings.backgroundUrl) : localStorage.removeItem('wisadel.backgroundUrl'); }
+      catch { throw new Error('背景图过大，无法保存。请使用更小的图片。'); }
+    }
     set(settings);
   },
   setProviders: (providers) => { localStorage.setItem('wisadel.providers', JSON.stringify(providers)); set({ providers }); },
