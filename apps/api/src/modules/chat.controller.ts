@@ -12,6 +12,7 @@ import { ImageService } from './image.service';
 import { ImageStorageService } from '../shared/image-storage.service';
 import { BillingService } from './billing.service';
 import type { SettledModelUsage } from '../providers/deepseek.service';
+import { ProviderRouterService } from '../providers/provider-router.service';
 
 @Controller('chat')
 @UseGuards(AuthGuard)
@@ -23,8 +24,11 @@ export class ChatController {
     private readonly sd: StableDiffusionService,
     private readonly images: ImageService,
     private readonly storage: ImageStorageService,
-    private readonly billing: BillingService
+    private readonly billing: BillingService,
+    private readonly router: ProviderRouterService
   ) {}
+
+  @Get('models') models() { return { models: this.router.catalogue() }; }
 
   @Get('sessions')
   list(@Req() request: Request, @Query('kind') kind?: string) {
@@ -39,6 +43,12 @@ export class ChatController {
   @Patch('sessions/:id')
   rename(@Req() request: Request, @Param('id') id: string, @Body('title') title: string) {
     return this.chat.renameSession(currentUser(request).sub, id, title);
+  }
+
+  @Patch('sessions/:id/model')
+  setModel(@Req() request: Request, @Param('id') id: string, @Body('model') model: string) {
+    if (!this.router.catalogue().some((item) => item.id === model)) throw new Error('Unsupported model');
+    return this.chat.setSessionModel(currentUser(request).sub, id, model);
   }
 
   @Delete('sessions/:id')
@@ -104,7 +114,7 @@ export class ChatController {
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
     } else {
-      for await (const chunk of this.deepseek.stream(history, enrichedContent, sendReasoning, (item) => usage.push(item))) {
+      for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item))) {
         answer += chunk;
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }

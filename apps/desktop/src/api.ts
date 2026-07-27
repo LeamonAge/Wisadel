@@ -1,4 +1,5 @@
 import type { AgentTask, Attachment, AuthResponse, CreateAgentTaskInput, CreateImageTaskInput, Health, ImageAgentAction, ImageTask, Message, SanityAccount, SanityLedgerEntry, SdCapabilities, SdParams, Session, SessionKind, UploadFileResponse, UploadImageResponse } from '@wisadel/contracts';
+export type PublicModel = { id: string; provider: string; family: string; name: string; modality: 'text' };
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000/api/v1';
 export const AUTH_EXPIRED_EVENT = 'wisadel:auth-expired';
@@ -45,12 +46,14 @@ export class ApiClient {
     this.setTokens(null, null);
   };
   sessions = (kind: SessionKind) => this.request<Session[]>(`/chat/sessions?kind=${kind}`);
+  models = () => this.request<{ models: PublicModel[] }>('/chat/models');
   createSession = (kind: SessionKind) =>
     this.request<Session>('/chat/sessions', { method: 'POST', body: JSON.stringify({ kind }) });
   messages = (id: string) => this.request<Message[]>(`/chat/sessions/${id}/messages`);
   deleteSession = (id: string) => this.request(`/chat/sessions/${id}`, { method: 'DELETE' });
   renameSession = (id: string, title: string) =>
     this.request<Session>(`/chat/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) });
+  setSessionModel = (id: string, model: string) => this.request<Session>(`/chat/sessions/${id}/model`, { method: 'PATCH', body: JSON.stringify({ model }) });
   createImageTask = (input: CreateImageTaskInput) =>
     this.request<ImageTask>('/image-tasks', { method: 'POST', body: JSON.stringify(input) });
   sdCapabilities = () => this.request<SdCapabilities>('/image-tasks/capabilities');

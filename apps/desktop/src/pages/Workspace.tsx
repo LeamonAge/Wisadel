@@ -4,11 +4,11 @@ import {
   FileText, ImagePlus, Layers3, ListTodo, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RotateCcw,
   Scissors,
   ScanEye, Search, Send, Settings, SlidersHorizontal, Sparkles, Square, Trash2, Upload,
-  WandSparkles, X, Zap
+  WandSparkles, X, Zap, Minus, Square as WindowSquare
 } from 'lucide-react';
 import type { AgentTask, SanityAccount, SanityLedgerEntry, SdParams, Session } from '@wisadel/contracts';
 import { useAppStore } from '../store';
-import { api } from '../api';
+import { api, type PublicModel } from '../api';
 
 const navItems = [
   { id: 'chat', label: '对话', icon: MessageSquare },
@@ -62,7 +62,7 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
       <header className="titlebar">
         <AccountMenu user={user} onLogout={onLogout} />
         <div className="titlebar-center"><span className="status-dot" />{standaloneImage ? 'Stable Diffusion AI' : 'Wisadel Preview'}</div>
-        <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge">离线</span>}</div>
+        <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge">离线</span>}<WindowControls /></div>
       </header>
       <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''} ${standaloneImage ? 'standalone-image' : ''} ${sidebarOpen ? '' : 'sidebar-collapsed'}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
         {!standaloneImage && <nav className="rail">
@@ -81,6 +81,11 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
       <ImageViewer />
     </main>
   );
+}
+
+function WindowControls() {
+  const control = (action: 'minimize' | 'maximize' | 'close') => { void window.wisadelDesktop?.windowControl(action); };
+  return <div className="window-controls"><button onClick={() => control('minimize')} aria-label="最小化" title="最小化"><Minus size={15} /></button><button onClick={() => control('maximize')} aria-label="最大化或还原" title="最大化或还原"><WindowSquare size={13} /></button><button className="close-control" onClick={() => control('close')} aria-label="关闭" title="关闭"><X size={15} /></button></div>;
 }
 
 function AccountMenu({ user, onLogout }: { user: { nickname: string; role: string }; onLogout: () => void }) {
@@ -190,6 +195,9 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
   const listRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const active = sessions.find((session) => session.id === activeId);
+  const [models, setModels] = useState<PublicModel[]>([]);
+  useEffect(() => { if (page === 'chat') void api.models().then((result) => setModels(result.models)).catch(() => setModels([])); }, [page]);
+  const changeModel = async (model: string) => { if (!activeId) return; const session = await api.setSessionModel(activeId, model); useAppStore.setState((state) => ({ sessions: state.sessions.map((item) => item.id === session.id ? session : item) })); };
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
@@ -239,7 +247,7 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
   const returnToBottom = () => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
 
   return <section className="conversation">
-    <header className="conversation-header"><div className="conversation-title">{!sidebarOpen && <button className="icon-button history-toggle" onClick={onOpenSidebar} title="打开历史会话"><PanelLeftOpen size={18} /></button>}<div><span>{page === 'chat' ? 'AI 对话' : '图像生成'}</span><h2>{active?.title ?? (loadingConversation ? '正在载入' : '新对话')}</h2></div></div><button className="model-selector"><span className="model-status" />{page === 'chat' ? 'DeepSeek' : 'Qwen Image'}<ChevronDown size={15} /></button></header>
+    <header className="conversation-header"><div className="conversation-title">{!sidebarOpen && <button className="icon-button history-toggle" onClick={onOpenSidebar} title="打开历史会话"><PanelLeftOpen size={18} /></button>}<div><span>{page === 'chat' ? 'AI 对话' : '图像生成'}</span><h2>{active?.title ?? (loadingConversation ? '正在载入' : '新对话')}</h2></div></div>{page === 'chat' ? <select className="model-selector" value={active?.model ?? ''} onChange={(event) => void changeModel(event.target.value)}>{models.map((model) => <option key={model.id} value={model.id}>{model.family} · {model.name}</option>)}</select> : <button className="model-selector"><span className="model-status" />Qwen Image<ChevronDown size={15} /></button>}</header>
     <div className="message-list" ref={listRef} onScroll={(event) => { const target = event.currentTarget; setShowReturnBottom(target.scrollHeight - target.scrollTop - target.clientHeight > 180); }}>
       {loadingConversation && <div className="conversation-loading"><Sparkles size={18} />正在恢复会话</div>}
       {!loadingConversation && !messages.length && <div className="empty-conversation"><div className="empty-symbol">{page === 'chat' ? <MessageSquare size={25} /> : <WandSparkles size={25} />}</div><h3>{page === 'chat' ? '今天想一起解决什么？' : '描述你想创造的画面'}</h3><p>{page === 'chat' ? '从问题、想法或一段待整理的内容开始。' : '我会先整理提示词与参数，由你确认后再生成。'}</p><div className="suggestions">{(page === 'chat' ? ['帮我梳理一个产品想法', '解释一段复杂概念', '制定今天的工作计划'] : ['雨夜里的未来城市', '极简主义产品摄影', '电影感山谷晨雾']).map((text) => <button key={text} onClick={() => setInput(text)}>{text}</button>)}</div></div>}

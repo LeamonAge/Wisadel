@@ -105,7 +105,7 @@ async function applyBackgroundPalette(source: string | null, theme: 'dark' | 'li
     root.style.setProperty('--background-rgb', color.join(' '));
     root.style.setProperty('--background-ink', ink);
     root.style.setProperty('--background-muted', luminance > .58 ? '#625b58' : '#d0c8c5');
-    window.wisadelDesktop?.setTheme(luminance > .58 ? 'light' : 'dark');
+    window.wisadelDesktop?.setTheme(luminance > .58 ? 'light' : 'dark', `#${color.map((value) => value.toString(16).padStart(2, '0')).join('')}`);
   } catch {
     root.dataset.customBackground = 'false';
     window.wisadelDesktop?.setTheme(theme);

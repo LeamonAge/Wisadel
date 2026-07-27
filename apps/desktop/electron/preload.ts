@@ -11,8 +11,9 @@ contextBridge.exposeInMainWorld('wisadelUpdater', {
 });
 
 contextBridge.exposeInMainWorld('wisadelDesktop', {
+  windowControl: (action: 'minimize' | 'maximize' | 'close') => ipcRenderer.invoke('wisadel:window-control', action) as Promise<boolean>,
   openImageStudio: () => ipcRenderer.invoke('wisadel:open-image-studio'),
   captureScreen: () => ipcRenderer.invoke('wisadel:capture-screen') as Promise<string>,
-  setTheme: (theme: 'dark' | 'light') => ipcRenderer.invoke('wisadel:set-theme', theme),
+  setTheme: (theme: 'dark' | 'light', chromeColor?: string) => ipcRenderer.invoke('wisadel:set-theme', theme, chromeColor),
   setProviderSecret: (providerId: string, secret: string) => ipcRenderer.invoke('wisadel:set-provider-secret', providerId, secret) as Promise<void>
 });

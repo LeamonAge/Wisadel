@@ -8,10 +8,9 @@ let imageStudioWindow: BrowserWindow | null = null;
 let lastUpdateEvent: object | null = null;
 let tray: Tray | null = null;
 let quitting = false;
-const updateWindowChrome = (window: BrowserWindow | null, theme: 'dark' | 'light') => {
-  if (!window || window.isDestroyed()) return;
-  const palette = theme === 'light' ? { color: '#ffffff', symbolColor: '#3d2a27' } : { color: '#120b0b', symbolColor: '#d7cece' };
-  window.setTitleBarOverlay({ ...palette, height: 38 });
+const updateWindowChrome = (window: BrowserWindow | null, theme: 'dark' | 'light', chromeColor?: string) => {
+  // Window controls are now rendered by React so they inherit the full UI palette.
+  void window; void theme; void chromeColor;
 };
 
 const showWindow = () => {
@@ -68,8 +67,7 @@ const createWindow = () => {
     minWidth: 1080,
     minHeight: 680,
     backgroundColor: '#120b0b',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#120b0b', symbolColor: '#d7cece', height: 38 },
+    frame: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
 
@@ -103,8 +101,7 @@ const openImageStudio = () => {
     minHeight: 680,
     backgroundColor: '#120b0b',
     title: 'Stable Diffusion AI · Wisadel',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#120b0b', symbolColor: '#d7cece', height: 38 },
+    frame: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   imageStudioWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -117,14 +114,22 @@ const openImageStudio = () => {
 };
 
 app.whenReady().then(() => {
+  ipcMain.handle('wisadel:window-control', (event, action: 'minimize' | 'maximize' | 'close') => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return false;
+    if (action === 'minimize') window.minimize();
+    if (action === 'maximize') window.isMaximized() ? window.unmaximize() : window.maximize();
+    if (action === 'close') window.close();
+    return window.isMaximized();
+  });
   ipcMain.handle('wisadel:set-provider-secret', (_event, providerId: string, secret: string) => {
     if (!/^[a-z0-9-]{20,}$/i.test(providerId) || !secret || secret.length > 4096) throw new Error('Invalid provider secret');
     const encrypted = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(secret).toString('base64') : secret;
     writeFileSync(path.join(app.getPath('userData'), `provider-secret-${providerId}.dat`), encrypted, { mode: 0o600 });
   });
-  ipcMain.handle('wisadel:set-theme', (_event, theme: 'dark' | 'light') => {
-    updateWindowChrome(mainWindow, theme);
-    updateWindowChrome(imageStudioWindow, theme);
+  ipcMain.handle('wisadel:set-theme', (_event, theme: 'dark' | 'light', chromeColor?: string) => {
+    updateWindowChrome(mainWindow, theme, /^#[0-9a-f]{6}$/i.test(chromeColor ?? '') ? chromeColor : undefined);
+    updateWindowChrome(imageStudioWindow, theme, /^#[0-9a-f]{6}$/i.test(chromeColor ?? '') ? chromeColor : undefined);
   });
   ipcMain.handle('wisadel:update:download', async () => {
     try {

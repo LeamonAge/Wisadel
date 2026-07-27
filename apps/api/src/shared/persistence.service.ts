@@ -90,6 +90,17 @@ export class PersistenceService {
     return count.count ? this.findSession(userId, id) : null;
   }
 
+  async setSessionModel(userId: string, id: string, model: string): Promise<Session | null> {
+    if (!this.integrated) {
+      const session = this.memory.sessions.get(id);
+      if (!session || session.userId !== userId) return null;
+      session.model = model; session.updatedAt = new Date().toISOString();
+      return this.publicSession(session);
+    }
+    const count = await this.prisma.chatSession.updateMany({ where: { id, userId, deletedAt: null }, data: { model } });
+    return count.count ? this.findSession(userId, id) : null;
+  }
+
   async deleteSession(userId: string, id: string) {
     if (!this.integrated) {
       const session = this.memory.sessions.get(id);

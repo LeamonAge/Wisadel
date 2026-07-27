@@ -2,10 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { CreateMessageInput, CreateSessionInput, Message, Session } from '@wisadel/contracts';
 import { randomUUID } from 'node:crypto';
 import { PersistenceService } from '../shared/persistence.service';
+import { ProviderRouterService } from '../providers/provider-router.service';
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly store: PersistenceService) {}
+  constructor(private readonly store: PersistenceService, private readonly router: ProviderRouterService) {}
 
   listSessions(userId: string, kind?: string): Promise<Session[]> {
     return this.store.listSessions(userId, kind);
@@ -18,6 +19,12 @@ export class ChatService {
   async renameSession(userId: string, id: string, title: string): Promise<Session> {
     const session = await this.store.renameSession(userId, id, title.trim().slice(0, 100));
     if (!session) throw new NotFoundException('会话不存在');
+    return session;
+  }
+
+  async setSessionModel(userId: string, id: string, model: string): Promise<Session> {
+    const session = await this.store.setSessionModel(userId, id, model);
+    if (!session) throw new NotFoundException('Session not found');
     return session;
   }
 

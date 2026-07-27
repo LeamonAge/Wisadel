@@ -23,6 +23,7 @@ import { BillingController } from './modules/billing.controller';
 import { BillingService } from './modules/billing.service';
 import { AgentTaskController } from './modules/agent-task.controller';
 import { AgentTaskService } from './modules/agent-task.service';
+import { ProviderRouterService } from './providers/provider-router.service';
 
 @Module({
   imports: [
@@ -34,6 +35,6 @@ import { AgentTaskService } from './modules/agent-task.service';
     })
   ],
   controllers: [AuthController, ChatController, ImageController, UploadController, HealthController, AdminController, BillingController, AgentTaskController],
-  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, AgentToolsService, DeepSeekService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService]
+  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, AgentToolsService, DeepSeekService, ProviderRouterService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService]
 })
 export class AppModule {}
