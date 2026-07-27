@@ -195,8 +195,8 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
   const listRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const active = sessions.find((session) => session.id === activeId);
-  const [models, setModels] = useState<PublicModel[]>([]);
-  useEffect(() => { if (page === 'chat') void api.models().then((result) => setModels(result.models)).catch(() => setModels([])); }, [page]);
+  const [models, setModels] = useState<PublicModel[]>([{ id: 'deepseek-chat', provider: 'deepseek', family: 'DeepSeek', name: 'DeepSeek Chat', modality: 'text' }]);
+  useEffect(() => { if (page === 'chat') void api.models().then((result) => { if (result.models.length) setModels(result.models); }).catch(() => undefined); }, [page]);
   const changeModel = async (model: string) => { if (!activeId) return; const session = await api.setSessionModel(activeId, model); useAppStore.setState((state) => ({ sessions: state.sessions.map((item) => item.id === session.id ? session : item) })); };
 
   useEffect(() => {

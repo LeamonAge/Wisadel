@@ -93,16 +93,20 @@ async function applyBackgroundPalette(source: string | null, theme: 'dark' | 'li
     if (!context) return;
     context.drawImage(image, 0, 0, 32, 32);
     const pixels = context.getImageData(0, 0, 32, 32).data;
-    let red = 0; let green = 0; let blue = 0; let count = 0;
+    let red = 0; let green = 0; let blue = 0; let count = 0; let accent: [number, number, number] = [192, 65, 50]; let accentScore = -1;
     for (let index = 0; index < pixels.length; index += 4) {
       if ((pixels[index + 3] ?? 0) < 80) continue;
-      red += pixels[index] ?? 0; green += pixels[index + 1] ?? 0; blue += pixels[index + 2] ?? 0; count += 1;
+      const pixel: [number, number, number] = [pixels[index] ?? 0, pixels[index + 1] ?? 0, pixels[index + 2] ?? 0];
+      red += pixel[0]; green += pixel[1]; blue += pixel[2]; count += 1;
+      const highest = Math.max(...pixel); const lowest = Math.min(...pixel); const score = (highest - lowest) * (highest > 35 && lowest < 235 ? 1 : .25);
+      if (score > accentScore) { accent = pixel; accentScore = score; }
     }
     const color = count ? [Math.round(red / count), Math.round(green / count), Math.round(blue / count)] : theme === 'light' ? [255, 255, 255] : [18, 16, 16];
     const luminance = ((color[0] ?? 0) * 0.2126 + (color[1] ?? 0) * 0.7152 + (color[2] ?? 0) * 0.0722) / 255;
     const ink = luminance > .58 ? '#211c1b' : '#f8f5f4';
     root.dataset.customBackground = 'true';
     root.style.setProperty('--background-rgb', color.join(' '));
+    root.style.setProperty('--background-accent-rgb', accent.join(' '));
     root.style.setProperty('--background-ink', ink);
     root.style.setProperty('--background-muted', luminance > .58 ? '#625b58' : '#d0c8c5');
     window.wisadelDesktop?.setTheme(luminance > .58 ? 'light' : 'dark', `#${color.map((value) => value.toString(16).padStart(2, '0')).join('')}`);
