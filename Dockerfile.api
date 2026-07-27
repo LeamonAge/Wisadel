@@ -11,4 +11,4 @@ RUN npm run build -w @wisadel/contracts && npm run db:generate -w @wisadel/api &
 WORKDIR /app/apps/api
 RUN mkdir -p uploads
 EXPOSE 3000
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema prisma/schema.prisma && node dist/main.js"]
