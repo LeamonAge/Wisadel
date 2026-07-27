@@ -19,6 +19,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run package:win
+        env:
+          VITE_API_URL: http://121.4.21.59:3000/api/v1
       - name: Create release and upload assets
         shell: pwsh
         env:
