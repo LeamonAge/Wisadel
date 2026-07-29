@@ -11,6 +11,7 @@ export function App() {
   const loadSessions = useAppStore((state) => state.loadSessions);
   const setPage = useAppStore((state) => state.setPage);
   const theme = useAppStore((state) => state.theme);
+  const appearanceMode = useAppStore((state) => state.appearanceMode);
   const workspaceOpacity = useAppStore((state) => state.workspaceOpacity);
   const conversationOpacity = useAppStore((state) => state.conversationOpacity);
   const backgroundUrl = useAppStore((state) => state.backgroundUrl);
@@ -50,12 +51,14 @@ export function App() {
   }, [imageStudio, loadSessions, setPage, setUser]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const effectiveTheme = appearanceMode === 'custom' ? theme : appearanceMode;
+    document.documentElement.dataset.theme = effectiveTheme;
     document.documentElement.style.setProperty('--workspace-opacity', String(workspaceOpacity / 100));
     document.documentElement.style.setProperty('--conversation-opacity', String(conversationOpacity / 100));
-    document.documentElement.style.setProperty('--custom-background', backgroundUrl ? `url("${backgroundUrl}")` : 'none');
-    void applyBackgroundPalette(backgroundUrl, theme);
-  }, [theme, workspaceOpacity, conversationOpacity, backgroundUrl]);
+    const activeBackground = appearanceMode === 'custom' ? backgroundUrl : null;
+    document.documentElement.style.setProperty('--custom-background', activeBackground ? `url("${activeBackground}")` : 'none');
+    void applyBackgroundPalette(activeBackground, effectiveTheme);
+  }, [theme, appearanceMode, workspaceOpacity, conversationOpacity, backgroundUrl]);
 
   useEffect(() => window.wisadelUpdater?.onEvent(setUpdate), []);
 

@@ -32,12 +32,14 @@ const withSdDefaults = (params: Partial<SdParams>): SdParams => ({
 
 type Page = SessionKind | 'models' | 'extensions' | 'plugins';
 type Theme = 'dark' | 'light';
+export type AppearanceMode = Theme | 'custom';
 export type Language = 'zh-CN' | 'zh-TW' | 'en';
 export type ProviderConfig = { id: string; name: string; baseUrl: string; models: string[]; hasKey: boolean };
 
 interface AppState {
   user: User | null;
   theme: Theme;
+  appearanceMode: AppearanceMode;
   autoGenerate: boolean;
   localFileAccess: boolean;
   language: Language;
@@ -69,6 +71,7 @@ interface AppState {
   uploadingFile: boolean;
   setUser: (user: User | null) => void;
   setTheme: (theme: Theme) => void;
+  setAppearanceMode: (mode: AppearanceMode) => void;
   setAutoGenerate: (enabled: boolean) => void;
   setLocalFileAccess: (enabled: boolean) => void;
   setLanguage: (language: Language) => void;
@@ -113,6 +116,7 @@ const stopImagePoll = () => {
 export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   theme: (localStorage.getItem('wisadel.theme') as Theme | null) ?? 'dark',
+  appearanceMode: (localStorage.getItem('wisadel.appearanceMode') as AppearanceMode | null) ?? 'dark',
   autoGenerate: localStorage.getItem('wisadel.autoGenerate') === 'true',
   localFileAccess: localStorage.getItem('wisadel.localFileAccess') === 'true',
   language: (localStorage.getItem('wisadel.language') as Language | null) ?? 'zh-CN',
@@ -162,8 +166,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   }),
   setTheme: (theme) => {
     localStorage.setItem('wisadel.theme', theme);
-    set({ theme });
+    localStorage.setItem('wisadel.appearanceMode', theme);
+    set({ theme, appearanceMode: theme });
   },
+  setAppearanceMode: (appearanceMode) => { localStorage.setItem('wisadel.appearanceMode', appearanceMode); set({ appearanceMode }); },
   setAutoGenerate: (autoGenerate) => {
     localStorage.setItem('wisadel.autoGenerate', String(autoGenerate));
     set({ autoGenerate });
@@ -177,7 +183,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       try { settings.backgroundUrl ? localStorage.setItem('wisadel.backgroundUrl', settings.backgroundUrl) : localStorage.removeItem('wisadel.backgroundUrl'); }
       catch { throw new Error('背景图过大，无法保存。请使用更小的图片。'); }
     }
-    set(settings);
+    set({ ...settings, ...(settings.backgroundUrl ? { appearanceMode: 'custom' as const } : {}) });
+    if (settings.backgroundUrl) localStorage.setItem('wisadel.appearanceMode', 'custom');
   },
   setProviders: (providers) => { localStorage.setItem('wisadel.providers', JSON.stringify(providers)); set({ providers }); },
   setPage: async (page) => {

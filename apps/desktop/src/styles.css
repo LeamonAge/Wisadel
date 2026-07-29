@@ -170,4 +170,32 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 :root[data-custom-background='true'] .modal-backdrop, :root[data-custom-background='true'] .update-backdrop { background:#0009; }
 .model-selector { min-width:160px; appearance:auto; -webkit-appearance:menulist; justify-content:flex-start; }
 .model-selector:disabled { cursor:wait; opacity:.7; }
+.conversation-header > select.model-selector { display:none; }
+.titlebar { position:relative; }
+.appearance-switch { position:absolute; left:260px; top:9px; display:flex; gap:2px; padding:3px; border:1px solid #3c3432; border-radius:6px; background:#191514; -webkit-app-region:no-drag; }
+.appearance-switch button { width:27px; height:25px; display:grid; place-items:center; border:0; border-radius:4px; background:transparent; color:#938886; cursor:pointer; }
+.appearance-switch button:hover:not(:disabled), .appearance-switch button.active { background:#5f312d; color:#fff; }
+.appearance-switch button:disabled { opacity:.35; cursor:not-allowed; }
+.model-picker { position:absolute; z-index:9; top:15px; right:22px; }
+.model-picker-trigger { min-width:190px; height:32px; display:flex; align-items:center; gap:7px; padding:0 10px; border:1px solid #453a38; border-radius:6px; background:#1b1717; color:#ddd5d3; cursor:pointer; font-size:11px; }
+.model-picker-trigger span { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+.model-picker-menu { position:absolute; right:0; top:38px; width:340px; max-height:min(520px,calc(100vh - 130px)); overflow:auto; border:1px solid #4a3a38; border-radius:7px; background:#191515; box-shadow:0 18px 42px #000a; }
+.model-picker-menu header { height:46px; display:flex; align-items:center; justify-content:space-between; padding:0 8px 0 13px; border-bottom:1px solid #362d2b; }
+.model-picker-menu header>button:first-child { border:0; background:transparent; color:#d4c6c2; font-size:11px; cursor:pointer; }
+.model-provider-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; padding:10px; }
+.model-provider-grid button, .model-family-list button, .model-version-list button { min-width:0; border:1px solid #403432; border-radius:6px; background:#211a19; color:#ded3d0; cursor:pointer; }
+.model-provider-grid button { min-height:82px; display:grid; justify-items:start; gap:5px; padding:10px; }
+.model-provider-grid strong, .model-family-list strong, .model-version-list strong { font-size:12px; }
+.model-provider-grid small, .model-family-list small, .model-version-list small { color:#938580; font-size:10px; }
+.provider-mark, .family-icon { width:27px; height:27px; display:grid; place-items:center; border-radius:5px; background:#743a34; color:#fff; font-size:11px; font-weight:700; }
+.provider-mark.siliconflow { background:#317c73; }.provider-mark.openox { background:#4c5698; }
+.model-family-list, .model-version-list { display:grid; gap:6px; padding:9px; }
+.model-family-list button, .model-version-list button { min-height:54px; display:grid; grid-template-columns:30px minmax(0,1fr) auto; align-items:center; gap:9px; padding:8px; text-align:left; }
+.model-family-list button>div, .model-version-list button>div { min-width:0; }.model-family-list small, .model-version-list small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; }
+.model-version-list button.active, .model-provider-grid button:hover, .model-family-list button:hover, .model-version-list button:hover { border-color:#b7554a; background:#33201e; }
+:root[data-theme='light'] .appearance-switch, :root[data-theme='light'] .model-picker-menu { background:#fff; border-color:#d8d0ce; }
+:root[data-theme='light'] .appearance-switch button { color:#59413d; }.model-picker-trigger { background:#1b1717; }
+:root[data-theme='light'] .model-picker-trigger, :root[data-theme='light'] .model-provider-grid button, :root[data-theme='light'] .model-family-list button, :root[data-theme='light'] .model-version-list button { background:#fff; color:#3d2a27; border-color:#d8d0ce; }
+:root[data-custom-background='true'] .appearance-switch, :root[data-custom-background='true'] .model-picker-menu, :root[data-custom-background='true'] .model-picker-trigger { background-color:rgb(var(--background-rgb) / .96); color:var(--background-ink); border-color:rgb(var(--background-rgb) / .58); }
+:root[data-custom-background='true'] .model-provider-grid button, :root[data-custom-background='true'] .model-family-list button, :root[data-custom-background='true'] .model-version-list button { background-color:rgb(var(--background-rgb) / .82); color:var(--background-ink); border-color:rgb(var(--background-rgb) / .54); }
 .sanity-button img { display:block; background:#fff; border:1px solid currentColor; }

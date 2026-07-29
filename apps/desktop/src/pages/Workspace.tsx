@@ -4,7 +4,7 @@ import {
   FileText, ImagePlus, Layers3, ListTodo, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RotateCcw,
   Scissors,
   ScanEye, Search, Send, Settings, SlidersHorizontal, Sparkles, Square, Trash2, Upload,
-  WandSparkles, X, Zap, Minus, Square as WindowSquare
+  WandSparkles, X, Zap, Minus, Moon, Sun, Square as WindowSquare
 } from 'lucide-react';
 import type { AgentTask, SanityAccount, SanityLedgerEntry, SdParams, Session } from '@wisadel/contracts';
 import { useAppStore } from '../store';
@@ -60,6 +60,7 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
   return (
     <main className="app-shell">
       <header className="titlebar">
+        <AppearanceQuickSwitch />
         <AccountMenu user={user} onLogout={onLogout} />
         <div className="titlebar-center"><span className="status-dot" />{standaloneImage ? 'Stable Diffusion AI' : 'Wisadel Preview'}</div>
         <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge">离线</span>}<WindowControls /></div>
@@ -86,6 +87,14 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
 function WindowControls() {
   const control = (action: 'minimize' | 'maximize' | 'close') => { void window.wisadelDesktop?.windowControl(action); };
   return <div className="window-controls"><button onClick={() => control('minimize')} aria-label="最小化" title="最小化"><Minus size={15} /></button><button onClick={() => control('maximize')} aria-label="最大化或还原" title="最大化或还原"><WindowSquare size={13} /></button><button className="close-control" onClick={() => control('close')} aria-label="关闭" title="关闭"><X size={15} /></button></div>;
+}
+
+function AppearanceQuickSwitch() {
+  const mode = useAppStore((state) => state.appearanceMode);
+  const backgroundUrl = useAppStore((state) => state.backgroundUrl);
+  const setTheme = useAppStore((state) => state.setTheme);
+  const setMode = useAppStore((state) => state.setAppearanceMode);
+  return <div className="appearance-switch" aria-label="Appearance mode"><button className={mode === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')} title="Dark"><Moon size={14} /></button><button className={mode === 'light' ? 'active' : ''} onClick={() => setTheme('light')} title="Light"><Sun size={14} /></button><button className={mode === 'custom' ? 'active' : ''} disabled={!backgroundUrl} onClick={() => setMode('custom')} title={backgroundUrl ? 'Custom background' : 'Choose a background in settings'}><ImageIcon size={14} /></button></div>;
 }
 
 function AccountMenu({ user, onLogout }: { user: { nickname: string; role: string }; onLogout: () => void }) {
@@ -248,6 +257,7 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
 
   return <section className="conversation">
     <header className="conversation-header"><div className="conversation-title">{!sidebarOpen && <button className="icon-button history-toggle" onClick={onOpenSidebar} title="打开历史会话"><PanelLeftOpen size={18} /></button>}<div><span>{page === 'chat' ? 'AI 对话' : '图像生成'}</span><h2>{active?.title ?? (loadingConversation ? '正在载入' : '新对话')}</h2></div></div>{page === 'chat' ? <select className="model-selector" value={active?.model ?? ''} onChange={(event) => void changeModel(event.target.value)}>{models.map((model) => <option key={model.id} value={model.id}>{model.family} · {model.name}</option>)}</select> : <button className="model-selector"><span className="model-status" />Qwen Image<ChevronDown size={15} /></button>}</header>
+    {page === 'chat' && <ModelPicker models={models} selectedModel={active?.model ?? ''} onSelect={changeModel} />}
     <div className="message-list" ref={listRef} onScroll={(event) => { const target = event.currentTarget; setShowReturnBottom(target.scrollHeight - target.scrollTop - target.clientHeight > 180); }}>
       {loadingConversation && <div className="conversation-loading"><Sparkles size={18} />正在恢复会话</div>}
       {!loadingConversation && !messages.length && <div className="empty-conversation"><div className="empty-symbol">{page === 'chat' ? <MessageSquare size={25} /> : <WandSparkles size={25} />}</div><h3>{page === 'chat' ? '今天想一起解决什么？' : '描述你想创造的画面'}</h3><p>{page === 'chat' ? '从问题、想法或一段待整理的内容开始。' : '我会先整理提示词与参数，由你确认后再生成。'}</p><div className="suggestions">{(page === 'chat' ? ['帮我梳理一个产品想法', '解释一段复杂概念', '制定今天的工作计划'] : ['雨夜里的未来城市', '极简主义产品摄影', '电影感山谷晨雾']).map((text) => <button key={text} onClick={() => setInput(text)}>{text}</button>)}</div></div>}
@@ -260,6 +270,19 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
     {showReturnBottom && <button className="return-bottom" onClick={returnToBottom}><ChevronDown size={16} />回到底部</button>}
     <div className="composer-wrap"><div className="composer">{!!pendingImages.length && <div className="pending-images">{pendingImages.map((url) => <div key={url}><img src={url} alt="待发送图片" /><button type="button" onClick={() => removePending(url)} title="移除图片"><X size={13} /></button></div>)}</div>}{!!pendingAttachments.length && <div className="pending-files">{pendingAttachments.map((file) => <div key={file.url}><FileText size={15} /><span>{file.name}</span><button type="button" onClick={() => removeAttachment(file.url)} title="移除文件"><X size={13} /></button></div>)}</div>}<textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keyDown} placeholder={page === 'chat' ? '输入消息，或上传本地文件...' : '描述画面，或上传图片和文件让千问分析...'} rows={1} /><div className="composer-footer"><div className="composer-tools"><input ref={uploadRef} type="file" accept={page === 'image' ? 'image/*,.txt,.md,.json,.csv,.pdf' : undefined} hidden multiple onChange={(event) => { for (const file of Array.from(event.target.files ?? []).slice(0, 8 - pendingAttachments.length)) void uploadFile(file); event.target.value = ''; }} /><button type="button" className="attach-command" onClick={() => uploadRef.current?.click()} disabled={uploading || pendingAttachments.length >= 8} title="上传本地文件"><Paperclip size={16} /></button><button type="button" className="capture-command" onClick={() => void captureScreen()} disabled={capturing || pendingImages.length >= 4} title="截取当前屏幕并附加"><Scissors size={16} /></button>{page === 'chat' && <button type="button" className="background-command" onClick={() => void startBackgroundTask()} disabled={!input.trim() || backgroundStarting || sending} title="放入后台任务队列"><ListTodo size={16} /></button>}<span>{backgroundStarting ? '正在创建后台任务' : capturing ? '正在截取屏幕' : uploading ? '正在上传文件' : 'Enter 发送 · Shift + Enter 换行'}</span></div><button type="button" className="send-command" onClick={submit} disabled={(!input.trim() && !pendingImages.length && !pendingAttachments.length) || sending || uploading || !activeId} aria-label="发送消息" title="发送消息">{sending ? <Square size={16} /> : <Send size={17} />}</button></div>{(sendError || captureError) && <div className="composer-error">{sendError ?? captureError}</div>}</div></div>
   </section>;
+}
+
+function ModelPicker({ models, selectedModel, onSelect }: { models: PublicModel[]; selectedModel: string; onSelect: (model: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [provider, setProvider] = useState<string | null>(null);
+  const [family, setFamily] = useState<string | null>(null);
+  const selected = models.find((item) => item.id === selectedModel) ?? models[0];
+  const providers = [...new Set(models.map((item) => item.provider))];
+  const families = provider ? [...new Set(models.filter((item) => item.provider === provider).map((item) => item.family))] : [];
+  const versions = provider && family ? models.filter((item) => item.provider === provider && item.family === family) : [];
+  const choose = async (id: string) => { await onSelect(id); setOpen(false); setProvider(null); setFamily(null); };
+  const label = selected ? `${selected.family} - ${selected.name}` : 'Select model';
+  return <div className="model-picker"><button className="model-picker-trigger" onClick={() => setOpen((value) => !value)}><Bot size={15} /><span>{label}</span><ChevronDown size={14} /></button>{open && <div className="model-picker-menu"><header>{family ? <button onClick={() => setFamily(null)}>Back to families</button> : provider ? <button onClick={() => setProvider(null)}>Back to providers</button> : <strong>Select AI provider</strong>}<button className="icon-button" onClick={() => setOpen(false)}><X size={15} /></button></header>{!provider && <div className="model-provider-grid">{providers.map((name) => <button key={name} onClick={() => setProvider(name)}><span className={`provider-mark ${name}`}>{name.slice(0, 1).toUpperCase()}</span><strong>{name === 'siliconflow' ? 'SiliconFlow' : name === 'openox' ? 'OpenOx' : 'DeepSeek'}</strong><small>{models.filter((item) => item.provider === name).length} models</small></button>)}</div>}{provider && !family && <div className="model-family-list">{families.map((name) => <button key={name} onClick={() => setFamily(name)}><span className="family-icon"><Layers3 size={16} /></span><div><strong>{name}</strong><small>{models.filter((item) => item.provider === provider && item.family === name).length} versions</small></div><ChevronDown size={14} /></button>)}</div>}{provider && family && <div className="model-version-list">{versions.map((model) => <button key={model.id} className={model.id === selectedModel ? 'active' : ''} onClick={() => void choose(model.id)}><span className="family-icon"><Sparkles size={16} /></span><div><strong>{model.name}</strong><small>{model.id}</small></div>{model.id === selectedModel && <span className="model-status" />}</button>)}</div>}</div>}</div>;
 }
 
 function AgentTaskPanel({ tasks, onRetry }: { tasks: AgentTask[]; onRetry: (id: string) => Promise<void> }) {
