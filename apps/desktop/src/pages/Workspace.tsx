@@ -4,7 +4,7 @@ import {
   FileText, ImagePlus, Layers3, ListTodo, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RotateCcw,
   Scissors,
   ScanEye, Search, Send, Settings, SlidersHorizontal, Sparkles, Square, Trash2, Upload,
-  WandSparkles, X, Zap, Minus, Moon, Sun, Square as WindowSquare, Waves, Gem, Brain, Box
+  WandSparkles, X, Zap, Minus, Moon, Sun, Square as WindowSquare
 } from 'lucide-react';
 import type { AgentTask, SanityAccount, SanityLedgerEntry, SdParams, Session } from '@wisadel/contracts';
 import { useAppStore } from '../store';
@@ -273,23 +273,50 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
 }
 
 const FALLBACK_MODELS: PublicModel[] = [
-  { id: 'deepseek-chat', provider: 'deepseek', family: 'DeepSeek', name: 'DeepSeek Chat', modality: 'text' },
   { id: 'deepseek-ai/DeepSeek-V4-Pro', provider: 'siliconflow', family: 'DeepSeek', name: 'DeepSeek V4 Pro', modality: 'text' },
   { id: 'deepseek-ai/DeepSeek-V4-Flash', provider: 'siliconflow', family: 'DeepSeek', name: 'DeepSeek V4 Flash', modality: 'text' },
   { id: 'Qwen/Qwen3.5-397B-A17B', provider: 'siliconflow', family: 'Qwen', name: 'Qwen 3.5 397B', modality: 'text' },
+  { id: 'Qwen/Qwen3.6-35B-A3B', provider: 'siliconflow', family: 'Qwen', name: 'Qwen 3.6 35B A3B', modality: 'text' },
+  { id: 'Qwen/Qwen3.6-27B', provider: 'siliconflow', family: 'Qwen', name: 'Qwen 3.6 27B', modality: 'text' },
+  { id: 'PaddlePaddle/PaddleOCR-VL-1.5', provider: 'siliconflow', family: 'PaddleOCR', name: 'PaddleOCR VL 1.5', modality: 'text' },
   { id: 'MiniMaxAI/MiniMax-M2.5', provider: 'siliconflow', family: 'MiniMax', name: 'MiniMax M2.5', modality: 'text' },
   { id: 'moonshotai/Kimi-K2.7-Code', provider: 'siliconflow', family: 'Kimi', name: 'Kimi K2.7 Code', modality: 'text' },
+  { id: 'moonshotai/Kimi-K2.6', provider: 'siliconflow', family: 'Kimi', name: 'Kimi K2.6', modality: 'text' },
   { id: 'zai-org/GLM-5.2', provider: 'siliconflow', family: 'GLM', name: 'GLM 5.2', modality: 'text' },
+  { id: 'zai-org/GLM-5.1', provider: 'siliconflow', family: 'GLM', name: 'GLM 5.1', modality: 'text' },
+  { id: 'meituan-longcat/LongCat-2.0', provider: 'siliconflow', family: 'LongCat', name: 'LongCat 2.0', modality: 'text' },
+  { id: 'stepfun-ai/Step-3.5-Flash', provider: 'siliconflow', family: 'StepFun', name: 'Step 3.5 Flash', modality: 'text' },
+  { id: 'inclusionAI/Ling-flash-2.0', provider: 'siliconflow', family: 'Ling', name: 'Ling Flash 2.0', modality: 'text' },
+  { id: 'inclusionAI/Ling-mini-2.0', provider: 'siliconflow', family: 'Ling', name: 'Ling Mini 2.0', modality: 'text' },
+  { id: 'ByteDance-Seed/Seed-OSS-36B-Instruct', provider: 'siliconflow', family: 'Seed', name: 'Seed OSS 36B Instruct', modality: 'text' },
+  { id: 'claude-opus-4-8', provider: 'openox', family: 'Claude', name: 'Claude Opus 4.8', modality: 'text' },
+  { id: 'claude-opus-4-8-thinking', provider: 'openox', family: 'Claude', name: 'Claude Opus 4.8 Thinking', modality: 'text' },
+  { id: 'claude-opus-4-7', provider: 'openox', family: 'Claude', name: 'Claude Opus 4.7', modality: 'text' },
+  { id: 'claude-opus-4-7-thinking', provider: 'openox', family: 'Claude', name: 'Claude Opus 4.7 Thinking', modality: 'text' },
+  { id: 'claude-opus-4-6', provider: 'openox', family: 'Claude', name: 'Claude Opus 4.6', modality: 'text' },
+  { id: 'claude-opus-4-6-thinking', provider: 'openox', family: 'Claude', name: 'Claude Opus 4.6 Thinking', modality: 'text' },
   { id: 'claude-sonnet-5', provider: 'openox', family: 'Claude', name: 'Claude Sonnet 5', modality: 'text' },
+  { id: 'claude-sonnet-4-6', provider: 'openox', family: 'Claude', name: 'Claude Sonnet 4.6', modality: 'text' },
+  { id: 'claude-fable-5', provider: 'openox', family: 'Claude', name: 'Claude Fable 5', modality: 'text' },
   { id: 'gpt-5.6-sol', provider: 'openox', family: 'GPT', name: 'GPT 5.6 Sol', modality: 'text' },
+  { id: 'gpt-5.6-terra', provider: 'openox', family: 'GPT', name: 'GPT 5.6 Terra', modality: 'text' },
+  { id: 'gpt-5.6-luna', provider: 'openox', family: 'GPT', name: 'GPT 5.6 Luna', modality: 'text' },
+  { id: 'gpt-5.5', provider: 'openox', family: 'GPT', name: 'GPT 5.5', modality: 'text' },
+  { id: 'gpt-5.4', provider: 'openox', family: 'GPT', name: 'GPT 5.4', modality: 'text' },
+  { id: 'gpt-5.4-mini', provider: 'openox', family: 'GPT', name: 'GPT 5.4 Mini', modality: 'text' },
   { id: 'gemini-3.1-pro-preview', provider: 'openox', family: 'Gemini', name: 'Gemini 3.1 Pro', modality: 'text' },
+  { id: 'gemini-3.5-flash', provider: 'openox', family: 'Gemini', name: 'Gemini 3.5 Flash', modality: 'text' },
   { id: 'grok-4.5', provider: 'openox', family: 'Grok', name: 'Grok 4.5', modality: 'text' }
 ];
 
+const OFFICIAL_BRAND_SLUG: Record<string, string> = {
+  deepseek: 'deepseek', qwen: 'qwen', paddleocr: 'paddlepaddle', minimax: 'minimax', seed: 'bytedance', claude: 'anthropic', gemini: 'googlegemini', grok: 'x'
+};
+
 const visualForFamily = (family: string) => {
   const key = family.toLowerCase().replaceAll(' ', '');
-  const Icon = key === 'deepseek' ? Waves : key === 'qwen' ? Layers3 : key === 'minimax' ? Box : key === 'kimi' ? Moon : key === 'glm' ? Brain : key === 'claude' ? MessageSquare : key === 'gemini' ? Gem : key === 'grok' ? Zap : Sparkles;
-  return <span className={`family-icon model-brand ${key}`}><Icon size={16} /></span>;
+  const slug = OFFICIAL_BRAND_SLUG[key];
+  return <span className={`family-icon model-brand ${key}`}>{slug ? <img src={`https://cdn.simpleicons.org/${slug}`} alt={`${family} official logo`} /> : <b>{family.slice(0, 2).toUpperCase()}</b>}</span>;
 };
 
 function ModelPicker({ models, selectedModel, onSelect }: { models: PublicModel[]; selectedModel: string; onSelect: (model: string) => Promise<void> }) {

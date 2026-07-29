@@ -13,7 +13,7 @@ export class ChatService {
   }
 
   createSession(userId: string, input: CreateSessionInput): Promise<Session> {
-    return this.store.createSession(userId, { kind: input.kind, title: input.title ?? (input.kind === 'chat' ? '新的对话' : '新的创作'), model: input.kind === 'chat' ? process.env.DEEPSEEK_MODEL ?? 'DeepSeek' : process.env.QWEN_MODEL ?? 'Qwen Image' });
+    return this.store.createSession(userId, { kind: input.kind, title: input.title ?? (input.kind === 'chat' ? '新的对话' : '新的创作'), model: input.kind === 'chat' ? this.router.defaultModel() : process.env.QWEN_MODEL ?? 'Qwen Image' });
   }
 
   async renameSession(userId: string, id: string, title: string): Promise<Session> {
