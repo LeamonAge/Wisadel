@@ -44,14 +44,12 @@ const CATALOGUE: PublicModel[] = [
 @Injectable()
 export class ProviderRouterService {
   constructor(private readonly deepseek: DeepSeekService) {}
-  // The picker is a capability catalogue. A missing key is reported when that
-  // particular model is used, rather than hiding the model family altogether.
-  catalogue() { return CATALOGUE; }
+  catalogue() { return CATALOGUE.filter((entry) => Boolean(this.keyFor(entry))); }
   defaultModel() { return 'deepseek-ai/DeepSeek-V4-Flash'; }
   async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void): AsyncGenerator<string> {
     const entry = CATALOGUE.find((item) => item.id === model) ?? CATALOGUE[0];
     if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage); return; }
-    const key = this.keyFor(entry.provider); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
+    const key = this.keyFor(entry); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
     if (!key) throw new ServiceUnavailableException(`${entry.provider} API 未配置`);
     const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: false, messages: [...messages.slice(-18).map((m) => ({ role: m.role, content: m.content })), { role: 'user', content: latest }], temperature: 0.2 }) });
     const body = await response.json().catch(() => ({})) as any;
@@ -60,5 +58,12 @@ export class ProviderRouterService {
     if (body?.usage) onUsage?.({ model: body.model ?? model, inputTokens: body.usage.prompt_tokens ?? 0, outputTokens: body.usage.completion_tokens ?? 0 });
     for (const chunk of text.match(/[\s\S]{1,16}/g) ?? [text]) yield chunk;
   }
-  private keyFor(provider: string) { return provider === 'siliconflow' ? process.env.SILICONFLOW_API_KEY : process.env.OPENOX_API_KEY ?? process.env.OPENOX_TEXT_API_KEY; }
+  private keyFor(entry: PublicModel) {
+    if (entry.provider === 'siliconflow') return process.env.SILICONFLOW_API_KEY;
+    if (entry.family === 'Claude') return process.env.OPENOX_CLAUDE_API_KEY ?? process.env.OPENOX_API_KEY ?? process.env.OPENOX_TEXT_API_KEY;
+    if (entry.family === 'GPT') return process.env.OPENOX_GPT_API_KEY;
+    if (entry.family === 'Gemini') return process.env.OPENOX_GEMINI_API_KEY;
+    if (entry.family === 'Grok') return process.env.OPENOX_GROK_API_KEY;
+    return undefined;
+  }
 }
