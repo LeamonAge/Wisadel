@@ -4,7 +4,7 @@ import {
   FileText, ImagePlus, Layers3, ListTodo, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RotateCcw,
   Scissors,
   ScanEye, Search, Send, Settings, SlidersHorizontal, Sparkles, Square, Trash2, Upload,
-  WandSparkles, X, Zap, Minus, Moon, Sun, Square as WindowSquare
+  WandSparkles, X, Zap, Minus, Moon, Sun, Square as WindowSquare, Waves, Gem, Brain, Box
 } from 'lucide-react';
 import type { AgentTask, SanityAccount, SanityLedgerEntry, SdParams, Session } from '@wisadel/contracts';
 import { useAppStore } from '../store';
@@ -204,7 +204,7 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
   const listRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const active = sessions.find((session) => session.id === activeId);
-  const [models, setModels] = useState<PublicModel[]>([{ id: 'deepseek-chat', provider: 'deepseek', family: 'DeepSeek', name: 'DeepSeek Chat', modality: 'text' }]);
+  const [models, setModels] = useState<PublicModel[]>(FALLBACK_MODELS);
   useEffect(() => { if (page === 'chat') void api.models().then((result) => { if (result.models.length) setModels(result.models); }).catch(() => undefined); }, [page]);
   const changeModel = async (model: string) => { if (!activeId) return; const session = await api.setSessionModel(activeId, model); useAppStore.setState((state) => ({ sessions: state.sessions.map((item) => item.id === session.id ? session : item) })); };
 
@@ -272,17 +272,36 @@ function Conversation({ sidebarOpen, onOpenSidebar }: { sidebarOpen: boolean; on
   </section>;
 }
 
+const FALLBACK_MODELS: PublicModel[] = [
+  { id: 'deepseek-chat', provider: 'deepseek', family: 'DeepSeek', name: 'DeepSeek Chat', modality: 'text' },
+  { id: 'deepseek-ai/DeepSeek-V4-Pro', provider: 'siliconflow', family: 'DeepSeek', name: 'DeepSeek V4 Pro', modality: 'text' },
+  { id: 'deepseek-ai/DeepSeek-V4-Flash', provider: 'siliconflow', family: 'DeepSeek', name: 'DeepSeek V4 Flash', modality: 'text' },
+  { id: 'Qwen/Qwen3.5-397B-A17B', provider: 'siliconflow', family: 'Qwen', name: 'Qwen 3.5 397B', modality: 'text' },
+  { id: 'MiniMaxAI/MiniMax-M2.5', provider: 'siliconflow', family: 'MiniMax', name: 'MiniMax M2.5', modality: 'text' },
+  { id: 'moonshotai/Kimi-K2.7-Code', provider: 'siliconflow', family: 'Kimi', name: 'Kimi K2.7 Code', modality: 'text' },
+  { id: 'zai-org/GLM-5.2', provider: 'siliconflow', family: 'GLM', name: 'GLM 5.2', modality: 'text' },
+  { id: 'claude-sonnet-5', provider: 'openox', family: 'Claude', name: 'Claude Sonnet 5', modality: 'text' },
+  { id: 'gpt-5.6-sol', provider: 'openox', family: 'GPT', name: 'GPT 5.6 Sol', modality: 'text' },
+  { id: 'gemini-3.1-pro-preview', provider: 'openox', family: 'Gemini', name: 'Gemini 3.1 Pro', modality: 'text' },
+  { id: 'grok-4.5', provider: 'openox', family: 'Grok', name: 'Grok 4.5', modality: 'text' }
+];
+
+const visualForFamily = (family: string) => {
+  const key = family.toLowerCase().replaceAll(' ', '');
+  const Icon = key === 'deepseek' ? Waves : key === 'qwen' ? Layers3 : key === 'minimax' ? Box : key === 'kimi' ? Moon : key === 'glm' ? Brain : key === 'claude' ? MessageSquare : key === 'gemini' ? Gem : key === 'grok' ? Zap : Sparkles;
+  return <span className={`family-icon model-brand ${key}`}><Icon size={16} /></span>;
+};
+
 function ModelPicker({ models, selectedModel, onSelect }: { models: PublicModel[]; selectedModel: string; onSelect: (model: string) => Promise<void> }) {
   const [open, setOpen] = useState(false);
-  const [provider, setProvider] = useState<string | null>(null);
   const [family, setFamily] = useState<string | null>(null);
-  const selected = models.find((item) => item.id === selectedModel) ?? models[0];
-  const providers = [...new Set(models.map((item) => item.provider))];
-  const families = provider ? [...new Set(models.filter((item) => item.provider === provider).map((item) => item.family))] : [];
-  const versions = provider && family ? models.filter((item) => item.provider === provider && item.family === family) : [];
-  const choose = async (id: string) => { await onSelect(id); setOpen(false); setProvider(null); setFamily(null); };
+  const catalogue = models.length > 1 ? models : FALLBACK_MODELS;
+  const selected = catalogue.find((item) => item.id === selectedModel) ?? catalogue[0];
+  const families = [...new Set(catalogue.map((item) => item.family))];
+  const versions = family ? catalogue.filter((item) => item.family === family) : [];
+  const choose = async (id: string) => { await onSelect(id); setOpen(false); setFamily(null); };
   const label = selected ? `${selected.family} - ${selected.name}` : 'Select model';
-  return <div className="model-picker"><button className="model-picker-trigger" onClick={() => setOpen((value) => !value)}><Bot size={15} /><span>{label}</span><ChevronDown size={14} /></button>{open && <div className="model-picker-menu"><header>{family ? <button onClick={() => setFamily(null)}>Back to families</button> : provider ? <button onClick={() => setProvider(null)}>Back to providers</button> : <strong>Select AI provider</strong>}<button className="icon-button" onClick={() => setOpen(false)}><X size={15} /></button></header>{!provider && <div className="model-provider-grid">{providers.map((name) => <button key={name} onClick={() => setProvider(name)}><span className={`provider-mark ${name}`}>{name.slice(0, 1).toUpperCase()}</span><strong>{name === 'siliconflow' ? 'SiliconFlow' : name === 'openox' ? 'OpenOx' : 'DeepSeek'}</strong><small>{models.filter((item) => item.provider === name).length} models</small></button>)}</div>}{provider && !family && <div className="model-family-list">{families.map((name) => <button key={name} onClick={() => setFamily(name)}><span className="family-icon"><Layers3 size={16} /></span><div><strong>{name}</strong><small>{models.filter((item) => item.provider === provider && item.family === name).length} versions</small></div><ChevronDown size={14} /></button>)}</div>}{provider && family && <div className="model-version-list">{versions.map((model) => <button key={model.id} className={model.id === selectedModel ? 'active' : ''} onClick={() => void choose(model.id)}><span className="family-icon"><Sparkles size={16} /></span><div><strong>{model.name}</strong><small>{model.id}</small></div>{model.id === selectedModel && <span className="model-status" />}</button>)}</div>}</div>}</div>;
+  return <div className="model-picker"><button className="model-picker-trigger" onClick={() => setOpen((value) => !value)}>{selected ? visualForFamily(selected.family) : <Bot size={15} />}<span>{label}</span><ChevronDown size={14} /></button>{open && <div className="model-picker-menu"><header>{family ? <button onClick={() => setFamily(null)}>返回模型系列</button> : <strong>选择 AI 模型</strong>}<button className="icon-button" onClick={() => setOpen(false)}><X size={15} /></button></header>{!family && <div className="model-provider-grid">{families.map((name) => <button key={name} onClick={() => setFamily(name)}>{visualForFamily(name)}<strong>{name}</strong><small>{catalogue.filter((item) => item.family === name).length} 个版本</small></button>)}</div>}{family && <div className="model-version-list">{versions.map((model) => <button key={model.id} className={model.id === selectedModel ? 'active' : ''} onClick={() => void choose(model.id)}>{visualForFamily(model.family)}<div><strong>{model.name}</strong><small>{model.provider === 'siliconflow' ? 'SiliconFlow' : model.provider === 'openox' ? 'OpenOx' : 'DeepSeek'} · {model.id}</small></div>{model.id === selectedModel && <span className="model-status" />}</button>)}</div>}</div>}</div>;
 }
 
 function AgentTaskPanel({ tasks, onRetry }: { tasks: AgentTask[]; onRetry: (id: string) => Promise<void> }) {

@@ -21,7 +21,9 @@ const CATALOGUE: PublicModel[] = [
 @Injectable()
 export class ProviderRouterService {
   constructor(private readonly deepseek: DeepSeekService) {}
-  catalogue() { return CATALOGUE.filter((item) => item.provider === 'deepseek' ? Boolean(process.env.DEEPSEEK_API_KEY) || process.env.AI_MODE === 'mock' : this.keyFor(item.provider)); }
+  // The picker is a capability catalogue. A missing key is reported when that
+  // particular model is used, rather than hiding the model family altogether.
+  catalogue() { return CATALOGUE; }
   defaultModel() { return this.catalogue()[0]?.id ?? 'deepseek-chat'; }
   async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void): AsyncGenerator<string> {
     const entry = CATALOGUE.find((item) => item.id === model) ?? CATALOGUE[0];
