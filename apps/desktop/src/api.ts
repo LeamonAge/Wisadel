@@ -121,6 +121,7 @@ export class ApiClient {
         if (event === 'params') onParams?.(data);
         if (event === 'image_task') onImageTask?.(data);
         if (event === 'sanity') window.dispatchEvent(new CustomEvent('wisadel:sanity', { detail: data }));
+        if (event === 'error') throw new Error(data.message ?? '模型服务暂时不可用');
         if (event === 'done') result = data;
       }
     }

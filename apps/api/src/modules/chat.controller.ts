@@ -80,15 +80,16 @@ export class ChatController {
     response.flushHeaders();
     response.write(`event: accepted\ndata: ${JSON.stringify(userMessage)}\n\n`);
 
-    let answer = '';
-    const usage: SettledModelUsage[] = [];
-    const sendReasoning = (label: string) => response.write(`event: reasoning\ndata: ${JSON.stringify({ label })}\n\n`);
-    const attachmentTexts = await Promise.all((input.attachments ?? []).map(async (attachment) => {
+    try {
+      let answer = '';
+      const usage: SettledModelUsage[] = [];
+      const sendReasoning = (label: string) => response.write(`event: reasoning\ndata: ${JSON.stringify({ label })}\n\n`);
+      const attachmentTexts = await Promise.all((input.attachments ?? []).map(async (attachment) => {
       const text = await this.storage.attachmentText(attachment.url, attachment.mimeType).catch(() => null);
       return text ? `\n\n附件 ${attachment.name}（URL: ${attachment.url}）：\n${text}` : `\n\n附件：${attachment.name}（${attachment.mimeType}，URL: ${attachment.url}，二进制文件可使用 copy_uploaded_file 复制）`;
     }));
-    const enrichedContent = `${input.content || '请分析附件。'}${attachmentTexts.join('')}`;
-    if (session.kind === 'image') {
+      const enrichedContent = `${input.content || '请分析附件。'}${attachmentTexts.join('')}`;
+      if (session.kind === 'image') {
       sendReasoning('正在理解创作需求');
       const currentParams = input.currentParams ?? DEFAULT_SD_PARAMS;
       sendReasoning('正在读取 Stable Diffusion 组件');
@@ -113,19 +114,24 @@ export class ChatController {
       for (const chunk of answer.match(/.{1,8}/gu) ?? [answer]) {
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
-    } else {
+      } else {
       for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item))) {
         answer += chunk;
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
-    }
-    const assistant = await this.chat.addAssistantMessage(id, answer);
-    if (session.kind === 'chat' && usage.length) {
+      }
+      const assistant = await this.chat.addAssistantMessage(id, answer);
+      if (session.kind === 'chat' && usage.length) {
       const entries = await this.billing.settleChatUsage(user.sub, usage);
       const latest = entries.at(-1);
       if (latest) response.write(`event: sanity\ndata: ${JSON.stringify({ balanceMilli: latest.balanceAfterMilli, costMilli: -latest.deltaMilli })}\n\n`);
+      }
+      response.write(`event: done\ndata: ${JSON.stringify(assistant)}\n\n`);
+      response.end();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '模型服务暂时不可用';
+      response.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
+      response.end();
     }
-    response.write(`event: done\ndata: ${JSON.stringify(assistant)}\n\n`);
-    response.end();
   }
 }

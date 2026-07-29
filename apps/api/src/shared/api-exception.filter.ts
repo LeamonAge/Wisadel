@@ -6,6 +6,12 @@ import { randomUUID } from 'node:crypto';
 export class ApiExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse<Response>();
+    // Streaming endpoints may already have sent their SSE headers. Writing a
+    // JSON error in that state aborts the connection and hides the real error.
+    if (response.headersSent) {
+      if (!response.writableEnded) response.end();
+      return;
+    }
     const request = host.switchToHttp().getRequest<Request>();
     const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const payload = exception instanceof HttpException ? exception.getResponse() : null;
