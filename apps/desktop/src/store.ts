@@ -30,7 +30,7 @@ const withSdDefaults = (params: Partial<SdParams>): SdParams => ({
   ...params
 });
 
-type Page = SessionKind | 'writing' | 'models' | 'extensions' | 'plugins';
+type Page = SessionKind | 'models' | 'extensions' | 'plugins';
 type Theme = 'dark' | 'light';
 export type AppearanceMode = Theme | 'custom';
 export type Language = 'zh-CN' | 'zh-TW' | 'en';

@@ -52,7 +52,7 @@ export class ApiClient {
   archivedSessions = (kind?: SessionKind) => this.request<Session[]>(`/chat/sessions/archive/list${kind ? `?kind=${kind}` : ''}`);
   restoreSession = (id: string) => this.request<Session>(`/chat/sessions/${id}/restore`, { method: 'POST' });
   models = () => this.request<{ models: PublicModel[] }>('/chat/models');
-  writingMaster = (input: { prompt: string; style: string; customStyle?: string; history?: string }) => this.request<{ content: string; reviewed: boolean; model: string }>('/writing-master', { method: 'POST', headers: { ...(localStorage.getItem('wisadel.workspaceId') ? { 'X-Wisadel-Workspace-Id': localStorage.getItem('wisadel.workspaceId')! } : {}) }, body: JSON.stringify(input) });
+  writingMaster = (input: { prompt: string; style: string; history?: string }) => this.request<{ content: string; reviewed: boolean; model: string }>('/writing-master', { method: 'POST', headers: { ...(localStorage.getItem('wisadel.workspaceId') ? { 'X-Wisadel-Workspace-Id': localStorage.getItem('wisadel.workspaceId')! } : {}) }, body: JSON.stringify(input) });
   workspaces = () => this.request<Workspace[]>('/workspaces');
   registerWorkspace = (path: string, name?: string) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify({ path, name }) });
   trustWorkspace = (id: string, trust: Workspace['trust']) => this.request<Workspace>(`/workspaces/${id}/trust`, { method: 'PATCH', body: JSON.stringify({ trust }) });

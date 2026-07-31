@@ -8,7 +8,6 @@ import {
 } from 'react';
 import {
   Blocks,
-  BookOpen,
   Bot,
   ChevronDown,
   CircleUserRound,
@@ -60,7 +59,6 @@ import '../workspace-editor.css';
 
 const navItems = [
   { id: 'chat', label: '对话', icon: MessageSquare },
-  { id: 'writing', label: '写作大师', icon: BookOpen },
   { id: 'models', label: '模型', icon: Layers3 },
   { id: 'extensions', label: '扩展', icon: Blocks },
   { id: 'plugins', label: '插件', icon: Zap }
@@ -174,8 +172,6 @@ export function Workspace({
         )}
         {page === 'chat' || page === 'image' ? (
           <Conversation sidebarOpen={sidebarOpen} onOpenSidebar={() => setSidebarOpen(true)} />
-        ) : page === 'writing' ? (
-          <WritingMaster />
         ) : (
           <PlaceholderPage page={page} />
         )}
@@ -2128,14 +2124,13 @@ function ImageViewer() {
 
 function WritingMaster() {
   const [style, setStyle] = useState('fantasy');
-  const [customStyle, setCustomStyle] = useState('');
   const [prompt, setPrompt] = useState('');
   const [history, setHistory] = useState('');
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
-  const styles = [['fantasy', '玄幻'], ['western_fantasy', '奇幻'], ['wuxia', '武侠'], ['romance', '言情'], ['sci_fi', '科幻'], ['mystery', '悬疑'], ['thriller', '惊悚'], ['historical', '历史'], ['military', '军事'], ['urban', '都市'], ['youth', '青春'], ['detective', '侦探'], ['horror', '恐怖'], ['fanfiction', '同人']];
-  const submit = async () => { if (!prompt.trim() || busy) return; setBusy(true); try { const result = await api.writingMaster({ prompt, style, customStyle, history }); setAnswer(result.content); setHistory((value) => `${value}\n用户：${prompt}\n写作大师：${result.content}`.trim()); setPrompt(''); } catch (error) { setAnswer(error instanceof Error ? error.message : '写作请求失败'); } finally { setBusy(false); } };
-  return <main className="writing-master"><section className="writing-chat"><header><span>WRITING MASTER</span><h1>写作大师</h1><p>DeepSeek Pro 双重生成与审校</p></header><div className="writing-output">{answer || '描述你想写的场景、人物或章节目标。'}</div><div className="writing-composer"><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="输入本轮写作要求" /><button onClick={() => void submit()} disabled={busy || !prompt.trim()}>{busy ? '生成中' : '生成'}</button></div></section><aside className="writing-options"><h2>写作风格</h2><div className="writing-style-grid">{styles.map(([id, label]) => <button key={id} className={style === id ? 'active' : ''} onClick={() => setStyle(id ?? 'fantasy')}>{label}</button>)}</div><label>个性化风格<textarea value={customStyle} onChange={(event) => setCustomStyle(event.target.value)} placeholder="描述语言、节奏、叙事偏好" /></label></aside></main>;
+  const styles = [['fantasy', '玄幻'], ['western_fantasy', '奇幻'], ['wuxia', '武侠'], ['romance', '言情'], ['sci_fi', '科幻'], ['mystery', '悬疑'], ['thriller', '惊悚'], ['historical', '历史'], ['military', '军事'], ['urban', '都市'], ['youth', '青春'], ['detective', '侦探'], ['horror', '恐怖'], ['fanfiction', '同人'], ['erotic', '性化']];
+  const submit = async () => { if (!prompt.trim() || busy) return; const request = prompt.trim(); setBusy(true); try { const result = await api.writingMaster({ prompt: request, style, history }); setAnswer(result.content); setHistory((value) => `${value}\n用户：${request}\n写作大师：${result.content}`.trim()); setPrompt(''); } catch (error) { setAnswer(error instanceof Error ? error.message : '写作请求失败'); } finally { setBusy(false); } };
+  return <main className="writing-master"><section className="writing-chat"><header><span>WRITING MASTER</span><h1>写作大师</h1><p>DeepSeek Pro 双重生成与审校</p></header><div className={`writing-editor ${answer ? '' : 'empty'}`} contentEditable={!!answer} suppressContentEditableWarning onInput={(event) => setAnswer(event.currentTarget.innerText)}>{answer || '描述你想写的场景、人物或章节目标。生成后的正文可以直接在这里编辑。'}</div><div className="composer-wrap writing-composer"><div className="composer"><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="输入本轮写作要求" rows={1} disabled={busy} /><div className="composer-footer"><div className="composer-tools"><span>{busy ? '正在生成并审校...' : 'Enter 发送 · Shift + Enter 换行'}</span></div><button type="button" className="send-command" onClick={() => void submit()} disabled={busy || !prompt.trim()} aria-label="生成内容" title="生成内容">{busy ? <Square size={16} /> : <Send size={17} />}</button></div></div></div></section><aside className="writing-options"><h2>写作风格</h2><div className="writing-style-grid">{styles.map(([id, label]) => <button type="button" key={id} className={style === id ? 'active' : ''} onClick={() => setStyle(id ?? 'fantasy')}>{label}</button>)}</div></aside></main>;
 }
 
 function PlaceholderPage({ page }: { page: 'models' | 'extensions' | 'plugins' }) {
@@ -2181,6 +2176,7 @@ function PlaceholderPage({ page }: { page: 'models' | 'extensions' | 'plugins' }
 }
 
 function ModelsCatalog() {
+  const [mode, setMode] = useState<'catalog' | 'writing'>('catalog');
   const items = [
     {
       title: '图像能力',
@@ -2191,8 +2187,10 @@ function ModelsCatalog() {
       ready: false
     }
   ];
+  if (mode === 'writing') return <section className="models-workspace"><div className="models-mode-tabs"><button type="button" onClick={() => setMode('catalog')}>模型目录</button><button type="button" className="active">写作大师</button></div><WritingMaster /></section>;
   return (
     <section className="placeholder-page models-page">
+      <div className="models-mode-tabs"><button type="button" className="active">模型目录</button><button type="button" onClick={() => setMode('writing')}>写作大师</button></div>
       <div className="section-title">
         <span>MODEL CENTER</span>
         <h1>模型</h1>
