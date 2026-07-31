@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 let mainWindow: BrowserWindow | null = null;
 let imageStudioWindow: BrowserWindow | null = null;
 let lastUpdateEvent: object | null = null;
+let updateAvailable = false;
 let tray: Tray | null = null;
 let quitting = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -111,10 +112,13 @@ const configureAutoUpdate = () => {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-available', (info) => sendUpdate({ type: 'available', version: info.version, notes: info.releaseNotes ?? '' }));
+  autoUpdater.on('update-available', (info) => { updateAvailable = true; sendUpdate({ type: 'available', version: info.version, notes: info.releaseNotes ?? '' }); });
   autoUpdater.on('download-progress', (progress) => sendUpdate({ type: 'progress', percent: progress.percent }));
   autoUpdater.on('update-downloaded', (info) => sendUpdate({ type: 'downloaded', version: info.version }));
-  autoUpdater.on('error', (error) => sendUpdate({ type: 'error', message: error.message }));
+  autoUpdater.on('error', (error) => {
+    if (updateAvailable) sendUpdate({ type: 'error', message: error.message });
+    else console.warn(`Update check failed: ${error.message}`);
+  });
   void autoUpdater.checkForUpdates();
 };
 

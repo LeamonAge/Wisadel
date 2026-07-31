@@ -2270,23 +2270,37 @@ function SettingsDialog() {
       })
       .catch(() => undefined);
   }, [open]);
-  const saveAgentProfile = async () => {
+  const saveAgentProfile = async (overrides: Partial<{ workStyle: string; workInstructions: string; persona: string; personaInstructions: string }> = {}) => {
     const workspaceId = localStorage.getItem('wisadel.workspaceId');
     if (!workspaceId) {
       setAgentStatus('请先在标题栏选择并信任一个工作区。');
       return;
     }
+    const nextWorkStyle = overrides.workStyle ?? workStyle;
+    const nextWorkInstructions = overrides.workInstructions ?? workInstructions;
+    const nextPersona = overrides.persona ?? persona;
+    const nextPersonaInstructions = overrides.personaInstructions ?? personaInstructions;
     try {
       await api.updateWorkspaceSettings(workspaceId, {
         agentProfile: {
-          workStyle, workInstructions: workInstructions.trim().slice(0, 8000), persona, personaInstructions: personaInstructions.trim().slice(0, 4000),
-          instructions: `工作方式：${workInstructions.trim()}\n\n沟通人格：${personaInstructions.trim()}`.slice(0, 12000)
+          workStyle: nextWorkStyle, workInstructions: nextWorkInstructions.trim().slice(0, 8000), persona: nextPersona, personaInstructions: nextPersonaInstructions.trim().slice(0, 4000),
+          instructions: `工作方式：${nextWorkInstructions.trim()}\n\n沟通人格：${nextPersonaInstructions.trim()}`.slice(0, 12000)
         }
       });
       setAgentStatus('已保存。后续对话会对所有模型生效。');
     } catch (error) {
       setAgentStatus(error instanceof Error ? error.message : '保存失败');
     }
+  };
+  const openCustomEditor = (kind: 'work' | 'persona') => {
+    if (kind === 'work') {
+      if (workStyle !== 'custom') setWorkInstructions('');
+      setWorkStyle('custom');
+    } else {
+      if (persona !== 'custom') setPersonaInstructions('');
+      setPersona('custom');
+    }
+    setCustomEditor(kind);
   };
   const addProvider = async () => {
     const name = providerName.trim();
@@ -2414,20 +2428,20 @@ function SettingsDialog() {
                     value={workStyle}
                     onChange={(event) => {
                       const next = event.target.value;
-                      setWorkStyle(next); if (next === 'custom') setCustomEditor('work');
+                      setWorkStyle(next); if (next === 'custom') openCustomEditor('work');
                       if (next !== 'custom') setWorkInstructions(agentPresets[next]!.instructions);
                     }}
                   >
                     {Object.entries(agentPresets).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}
                   </select>
                 </label>
-                <button className="text-command" onClick={() => setCustomEditor('work')}>编辑工作方式指令</button>
-                <label className="setting-field">沟通人格<select value={persona} onChange={(event) => { const next = event.target.value; setPersona(next); if (next === 'custom') setCustomEditor('persona'); else setPersonaInstructions(personaPresets[next]!.instructions); }}>{Object.entries(personaPresets).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select></label>
-                <button className="text-command" onClick={() => setCustomEditor('persona')}>编辑人格指令</button>
+                <button className="text-command" onClick={() => openCustomEditor('work')}>编辑工作方式指令</button>
+                <label className="setting-field">沟通人格<select value={persona} onChange={(event) => { const next = event.target.value; setPersona(next); if (next === 'custom') openCustomEditor('persona'); else setPersonaInstructions(personaPresets[next]!.instructions); }}>{Object.entries(personaPresets).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select></label>
+                <button className="text-command" onClick={() => openCustomEditor('persona')}>编辑人格指令</button>
                 <button className="text-command" onClick={() => void saveAgentProfile()}>保存 Agent 配置</button>
                 {agentStatus && <div className="setting-note">{agentStatus}</div>}
                 <div className="setting-note">此配置仅作用于当前已信任工作区，并统一传给所有模型。安全规则、敏感文件限制和本地操作确认始终固定。</div>
-                {customEditor && <div className="modal-backdrop"><section className="settings-dialog profile-dialog"><header><div><span>CUSTOM</span><h2>{customEditor === 'work' ? '自定义工作方式' : '自定义沟通人格'}</h2></div><button className="icon-button" onClick={() => setCustomEditor(null)}><X size={19} /></button></header><div className="settings-panel"><textarea className="agent-instructions" autoFocus value={customEditor === 'work' ? workInstructions : personaInstructions} maxLength={customEditor === 'work' ? 8000 : 4000} onChange={(event) => customEditor === 'work' ? setWorkInstructions(event.target.value) : setPersonaInstructions(event.target.value)} /> <button className="text-command" onClick={() => { if (customEditor === 'work') setWorkStyle('custom'); else setPersona('custom'); setCustomEditor(null); }}>保存自定义内容</button></div></section></div>}
+                {customEditor && <div className="modal-backdrop"><section className="settings-dialog profile-dialog custom-agent-dialog"><header><div><span>CUSTOM</span><h2>{customEditor === 'work' ? '自定义工作方式' : '自定义沟通人格'}</h2></div><button className="icon-button" onClick={() => setCustomEditor(null)}><X size={19} /></button></header><div className="settings-panel"><textarea className="agent-instructions" autoFocus placeholder={customEditor === 'work' ? '输入工作方式指令' : '输入沟通人格指令'} value={customEditor === 'work' ? workInstructions : personaInstructions} maxLength={customEditor === 'work' ? 8000 : 4000} onChange={(event) => customEditor === 'work' ? setWorkInstructions(event.target.value) : setPersonaInstructions(event.target.value)} /> <button className="text-command" onClick={() => void (async () => { const editor = customEditor; if (editor === 'work') { setWorkStyle('custom'); await saveAgentProfile({ workStyle: 'custom' }); } else { setPersona('custom'); await saveAgentProfile({ persona: 'custom' }); } setCustomEditor(null); })()}>保存自定义内容</button></div></section></div>}
               </>
             )}
             {tab === 'appearance' && (
