@@ -13,6 +13,7 @@ import { ImageStorageService } from '../shared/image-storage.service';
 import { BillingService } from './billing.service';
 import type { SettledModelUsage } from '../providers/deepseek.service';
 import { ProviderRouterService } from '../providers/provider-router.service';
+import { WorkspaceService } from './workspace.service';
 
 @Controller('chat')
 @UseGuards(AuthGuard)
@@ -25,7 +26,8 @@ export class ChatController {
     private readonly images: ImageService,
     private readonly storage: ImageStorageService,
     private readonly billing: BillingService,
-    private readonly router: ProviderRouterService
+    private readonly router: ProviderRouterService,
+    private readonly workspaces: WorkspaceService
   ) {}
 
   @Get('models') models() { return { models: this.router.catalogue() }; }
@@ -117,7 +119,10 @@ export class ChatController {
       } else {
       const workspaceId = request.header('x-wisadel-workspace-id');
       const localContext = workspaceId ? { userId: user.sub, workspaceId } : undefined;
-      for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext)) {
+      const workspace = workspaceId ? (await this.workspaces.list(user.sub)).find((item) => item.id === workspaceId && item.trust === 'TRUSTED') : undefined;
+      const settings = workspace?.settings;
+      const profile = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings.agentProfile as { instructions?: string } | undefined : undefined;
+      for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, profile?.instructions)) {
         answer += chunk;
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }

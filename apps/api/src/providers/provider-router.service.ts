@@ -49,12 +49,12 @@ export class ProviderRouterService {
   constructor(private readonly deepseek: DeepSeekService, private readonly tools: AgentToolsService, private readonly localActions: LocalAgentActionService) {}
   catalogue() { return CATALOGUE.filter((entry) => Boolean(this.keyFor(entry))); }
   defaultModel() { return 'deepseek-ai/DeepSeek-V4-Flash'; }
-  async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }): AsyncGenerator<string> {
+  async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }, profileInstructions?: string): AsyncGenerator<string> {
     const entry = CATALOGUE.find((item) => item.id === model) ?? CATALOGUE[0];
-    if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage, localContext); return; }
+    if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage, localContext, profileInstructions); return; }
     const key = this.keyFor(entry); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
     if (!key) throw new ServiceUnavailableException(`${entry.provider} API 未配置`);
-    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...messages.slice(-18).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
+    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...(profileInstructions ? [{ role: 'system', content: `User-selected working style. Follow it when compatible with the fixed safety rules:\n${profileInstructions.slice(0, 12000)}` }] : []), ...messages.slice(-18).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
     let text = '';
     for (let turn = 0; turn < 10; turn += 1) {
       const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: false, messages: conversation, tools: this.tools.definitions, tool_choice: 'auto', temperature: 0.2 }) });

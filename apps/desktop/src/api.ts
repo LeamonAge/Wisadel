@@ -51,6 +51,7 @@ export class ApiClient {
   workspaces = () => this.request<Workspace[]>('/workspaces');
   registerWorkspace = (path: string, name?: string) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify({ path, name }) });
   trustWorkspace = (id: string, trust: Workspace['trust']) => this.request<Workspace>(`/workspaces/${id}/trust`, { method: 'PATCH', body: JSON.stringify({ trust }) });
+  updateWorkspaceSettings = (id: string, settings: Record<string, unknown>) => this.request<Workspace>(`/workspaces/${id}/settings`, { method: 'PATCH', body: JSON.stringify(settings) });
   localAgentActions = (workspaceId: string) => this.request<Array<{ id: string; tool: string; input: Record<string, unknown> }>>(`/local-agent-actions/pending?workspaceId=${encodeURIComponent(workspaceId)}`);
   completeLocalAgentAction = (id: string, status: 'SUCCEEDED' | 'DENIED' | 'FAILED', result?: unknown, error?: string) => this.request(`/local-agent-actions/${id}/complete`, { method: 'POST', body: JSON.stringify({ status, result, error }) });
   workspaceAudit = (workspaceId: string) => this.request<Array<{ id: string; tool: string; status: string; inputSummary: string; resultSummary?: string; createdAt: string }>>(`/workspaces/${workspaceId}/audit`);

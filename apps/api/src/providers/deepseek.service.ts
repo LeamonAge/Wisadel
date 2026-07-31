@@ -21,7 +21,7 @@ export class DeepSeekService {
 
   get configured() { return Boolean(process.env.DEEPSEEK_API_KEY); }
 
-  async *stream(messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }): AsyncGenerator<string> {
+  async *stream(messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }, profileInstructions?: string): AsyncGenerator<string> {
     if ((process.env.AI_MODE ?? 'mock') === 'mock' || !this.configured) {
       const text = `这是 Wisadel 的本地模拟回复。我已经收到：${latest}。配置 DeepSeek 环境变量后，这里会切换为真实 Agent。`;
       for (const chunk of text.match(/.{1,8}/gu) ?? [text]) { yield chunk; await new Promise((resolve) => setTimeout(resolve, 20)); }
@@ -37,6 +37,7 @@ export class DeepSeekService {
 
 文件工具仅限授权工作区。不得尝试读取环境变量、.env、凭据、密钥或绕过路径限制。不要覆盖与任务无关的内容。网页工具用于读取用户提供或任务需要的公开网页，不得探测本机、局域网或云元数据地址。使用自信、冷静、简洁且准确的中文回答。`
       },
+      ...(profileInstructions ? [{ role: 'system' as const, content: `User-selected working style. Follow it when compatible with the fixed safety rules:\n${profileInstructions.slice(0, 12000)}` }] : []),
       ...messages.slice(-18).map((message): ProviderMessage => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
       { role: 'user', content: latest }
     ];
