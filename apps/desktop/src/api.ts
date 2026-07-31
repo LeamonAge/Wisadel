@@ -1,5 +1,6 @@
 import type { AgentTask, Attachment, AuthResponse, CreateAgentTaskInput, CreateImageTaskInput, Health, ImageAgentAction, ImageTask, Message, SanityAccount, SanityLedgerEntry, SdCapabilities, SdParams, Session, SessionKind, UploadFileResponse, UploadImageResponse } from '@wisadel/contracts';
 export type PublicModel = { id: string; provider: string; family: string; name: string; modality: 'text' };
+export type Workspace = { id: string; path: string; name: string; trust: 'UNTRUSTED' | 'TRUSTED'; settings: Record<string, unknown> };
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000/api/v1';
 export const AUTH_EXPIRED_EVENT = 'wisadel:auth-expired';
@@ -47,6 +48,9 @@ export class ApiClient {
   };
   sessions = (kind: SessionKind) => this.request<Session[]>(`/chat/sessions?kind=${kind}`);
   models = () => this.request<{ models: PublicModel[] }>('/chat/models');
+  workspaces = () => this.request<Workspace[]>('/workspaces');
+  registerWorkspace = (path: string, name?: string) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify({ path, name }) });
+  trustWorkspace = (id: string, trust: Workspace['trust']) => this.request<Workspace>(`/workspaces/${id}/trust`, { method: 'PATCH', body: JSON.stringify({ trust }) });
   createSession = (kind: SessionKind) =>
     this.request<Session>('/chat/sessions', { method: 'POST', body: JSON.stringify({ kind }) });
   messages = (id: string) => this.request<Message[]>(`/chat/sessions/${id}/messages`);

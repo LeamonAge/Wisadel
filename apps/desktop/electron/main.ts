@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { appendFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -159,6 +159,12 @@ app.whenReady().then(() => {
     const source = sources[0];
     if (!source || source.thumbnail.isEmpty()) throw new Error('无法获取当前屏幕截图');
     return source.thumbnail.toDataURL();
+  });
+  ipcMain.handle('wisadel:choose-workspace', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const options = { title: '选择本机工程目录', properties: ['openDirectory', 'createDirectory'] as const };
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? null : result.filePaths[0] ?? null;
   });
   createWindow();
   createTray();

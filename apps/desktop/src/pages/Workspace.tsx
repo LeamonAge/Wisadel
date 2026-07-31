@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import type { AgentTask, SanityAccount, SanityLedgerEntry, SdParams, Session } from '@wisadel/contracts';
 import { useAppStore } from '../store';
-import { api, type PublicModel } from '../api';
+import { api, type PublicModel, type Workspace as WorkspaceRecord } from '../api';
 
 const navItems = [
   { id: 'chat', label: '对话', icon: MessageSquare },
@@ -62,7 +62,7 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
       <header className="titlebar">
         <AppearanceQuickSwitch />
         <AccountMenu user={user} onLogout={onLogout} />
-        <div className="titlebar-center"><span className="status-dot" />{standaloneImage ? 'Stable Diffusion AI' : 'Wisadel Preview'}</div>
+        <div className="titlebar-center"><span className="status-dot" />{standaloneImage ? 'Stable Diffusion AI' : 'Wisadel Preview'}{!standaloneImage && <WorkspaceTrustMenu />}</div>
         <div className="titlebar-actions"><SanityCenter />{!online && <span className="offline-badge">离线</span>}<WindowControls /></div>
       </header>
       <div className={`workspace-grid ${page === 'image' ? 'with-inspector' : ''} ${standaloneImage ? 'standalone-image' : ''} ${sidebarOpen ? '' : 'sidebar-collapsed'}`} style={{ '--image-panel-width': `${imagePanelWidth}px` } as CSSProperties}>
@@ -82,6 +82,16 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
       <ImageViewer />
     </main>
   );
+}
+
+function WorkspaceTrustMenu() {
+  const [items, setItems] = useState<WorkspaceRecord[]>([]);
+  const [selected, setSelected] = useState(() => localStorage.getItem('wisadel.workspaceId') ?? '');
+  useEffect(() => { void api.workspaces().then((next) => { setItems(next); if (!selected && next[0]) { setSelected(next[0].id); localStorage.setItem('wisadel.workspaceId', next[0].id); } }).catch(() => undefined); }, [selected]);
+  const active = items.find((item) => item.id === selected);
+  const choose = async () => { const path = await window.wisadelDesktop?.chooseWorkspace(); if (!path) return; const registered = await api.registerWorkspace(path); setItems((all) => [registered, ...all.filter((item) => item.id !== registered.id)]); setSelected(registered.id); localStorage.setItem('wisadel.workspaceId', registered.id); };
+  if (!active) return <button className="workspace-trust-badge untrusted" onClick={() => void choose()}>选择工作区</button>;
+  return <button className={`workspace-trust-badge ${active.trust.toLowerCase()}`} onClick={() => void api.trustWorkspace(active.id, active.trust === 'TRUSTED' ? 'UNTRUSTED' : 'TRUSTED').then((next) => setItems((all) => all.map((item) => item.id === next.id ? next : item)))} title="切换工作区信任状态"><span>{active.name}</span><small>{active.trust === 'TRUSTED' ? '已信任' : '待信任'}</small></button>;
 }
 
 function WindowControls() {
