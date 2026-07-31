@@ -81,8 +81,16 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
       <SettingsDialog />
       <ImageViewer />
       {!standaloneImage && <LocalAgentRunner />}
+      {!standaloneImage && <WorkspaceAuditPanel />}
     </main>
   );
+}
+
+function WorkspaceAuditPanel() {
+  const [entries, setEntries] = useState<Array<{ id: string; tool: string; status: string; inputSummary: string; resultSummary?: string; createdAt: string }>>([]);
+  useEffect(() => { const workspaceId = localStorage.getItem('wisadel.workspaceId'); if (!workspaceId) return; const refresh = () => void api.workspaceAudit(workspaceId).then(setEntries).catch(() => undefined); refresh(); const timer = window.setInterval(refresh, 4000); return () => window.clearInterval(timer); }, []);
+  if (!entries.length) return null;
+  return <aside className="workspace-audit-panel"><header><ListTodo size={14} /><strong>Agent 审计</strong></header>{entries.slice(0, 5).map((entry) => <article key={entry.id}><span className={entry.status.toLowerCase()}>{entry.status}</span><div><strong>{entry.tool}</strong><p>{entry.inputSummary}</p>{entry.resultSummary && <small>{entry.resultSummary}</small>}</div></article>)}</aside>;
 }
 
 function LocalAgentRunner() {
