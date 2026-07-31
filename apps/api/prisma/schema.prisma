@@ -59,6 +59,14 @@ enum AgentApproval {
   DENIED
 }
 
+enum LocalAgentActionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  DENIED
+  FAILED
+}
+
 model User {
   id           String         @id @default(uuid()) @db.Uuid
   email        String         @unique @db.VarChar(255)
@@ -77,8 +85,27 @@ model User {
   agentTasks   AgentTask[]
   workspaces   Workspace[]
   auditEntries AgentAuditEntry[]
+  localAgentActions LocalAgentAction[]
 
   @@map("users")
+}
+
+model LocalAgentAction {
+  id          String                 @id @default(uuid()) @db.Uuid
+  userId      String                 @map("user_id") @db.Uuid
+  workspaceId String                 @map("workspace_id") @db.Uuid
+  tool        String                 @db.VarChar(100)
+  input       Json
+  status      LocalAgentActionStatus @default(PENDING)
+  result      Json?
+  error       String?                @db.Text
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@index([userId, status, createdAt])
+  @@index([workspaceId, status, createdAt])
+  @@map("local_agent_actions")
 }
 
 model Workspace {
@@ -92,6 +119,7 @@ model Workspace {
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   auditEntries AgentAuditEntry[]
+  localAgentActions LocalAgentAction[]
   @@unique([userId, path])
   @@index([userId, updatedAt(sort: Desc)])
   @@map("workspaces")
