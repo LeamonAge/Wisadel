@@ -25,6 +25,10 @@ import { AgentTaskController } from './modules/agent-task.controller';
 import { AgentTaskService } from './modules/agent-task.service';
 import { ProviderRouterService } from './providers/provider-router.service';
 import { BrowserAutomationService } from './providers/browser-automation.service';
+import { WorkspaceController } from './modules/workspace.controller';
+import { WorkspaceService } from './modules/workspace.service';
+import { ProjectContextController } from './modules/project-context.controller';
+import { ProjectContextService } from './modules/project-context.service';
 
 @Module({
   imports: [
@@ -35,7 +39,7 @@ import { BrowserAutomationService } from './providers/browser-automation.service
       signOptions: { expiresIn: '15m' }
     })
   ],
-  controllers: [AuthController, ChatController, ImageController, UploadController, HealthController, AdminController, BillingController, AgentTaskController],
-  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, BrowserAutomationService, AgentToolsService, DeepSeekService, ProviderRouterService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService]
+  controllers: [AuthController, ChatController, ImageController, UploadController, HealthController, AdminController, BillingController, AgentTaskController, WorkspaceController, ProjectContextController],
+  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, BrowserAutomationService, AgentToolsService, DeepSeekService, ProviderRouterService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService, WorkspaceService, ProjectContextService]
 })
 export class AppModule {}

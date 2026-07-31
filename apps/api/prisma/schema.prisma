@@ -47,6 +47,18 @@ enum AgentTaskStepStatus {
   FAILED
 }
 
+enum WorkspaceTrust {
+  UNTRUSTED
+  TRUSTED
+}
+
+enum AgentApproval {
+  PENDING
+  ONCE
+  ALWAYS_WORKSPACE
+  DENIED
+}
+
 model User {
   id           String         @id @default(uuid()) @db.Uuid
   email        String         @unique @db.VarChar(255)
@@ -63,8 +75,42 @@ model User {
   sanityMilli  Int            @default(100000) @map("sanity_milli")
   sanityLedger SanityLedgerEntry[]
   agentTasks   AgentTask[]
+  workspaces   Workspace[]
+  auditEntries AgentAuditEntry[]
 
   @@map("users")
+}
+
+model Workspace {
+  id          String         @id @default(uuid()) @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  path        String         @db.VarChar(1000)
+  name        String         @db.VarChar(160)
+  trust       WorkspaceTrust @default(UNTRUSTED)
+  settings    Json           @default("{}")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auditEntries AgentAuditEntry[]
+  @@unique([userId, path])
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("workspaces")
+}
+
+model AgentAuditEntry {
+  id          String        @id @default(uuid()) @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  workspaceId String?       @map("workspace_id") @db.Uuid
+  tool        String        @db.VarChar(100)
+  inputSummary String       @map("input_summary") @db.Text
+  status      AgentApproval @default(PENDING)
+  resultSummary String?     @map("result_summary") @db.Text
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("agent_audit_entries")
 }
 
 model SanityLedgerEntry {
