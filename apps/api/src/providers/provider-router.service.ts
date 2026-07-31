@@ -3,6 +3,7 @@ import type { Message } from '@wisadel/contracts';
 import { DeepSeekService, type SettledModelUsage } from './deepseek.service';
 import { AgentToolsService } from './agent-tools.service';
 import { buildAgentSystemPrompt } from './agent-prompt';
+import { LocalAgentActionService } from '../modules/local-agent-action.service';
 
 export type PublicModel = { id: string; provider: string; family: string; name: string; modality: 'text' };
 
@@ -45,10 +46,10 @@ const CATALOGUE: PublicModel[] = [
 
 @Injectable()
 export class ProviderRouterService {
-  constructor(private readonly deepseek: DeepSeekService, private readonly tools: AgentToolsService) {}
+  constructor(private readonly deepseek: DeepSeekService, private readonly tools: AgentToolsService, private readonly localActions: LocalAgentActionService) {}
   catalogue() { return CATALOGUE.filter((entry) => Boolean(this.keyFor(entry))); }
   defaultModel() { return 'deepseek-ai/DeepSeek-V4-Flash'; }
-  async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void): AsyncGenerator<string> {
+  async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }): AsyncGenerator<string> {
     const entry = CATALOGUE.find((item) => item.id === model) ?? CATALOGUE[0];
     if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage); return; }
     const key = this.keyFor(entry); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
@@ -67,12 +68,20 @@ export class ProviderRouterService {
       conversation.push({ role: 'assistant', content: message.content ?? null, tool_calls: calls });
       onProgress?.('正在执行 Agent 工具');
       for (const call of calls) {
-        const result = await this.tools.execute({ name: call.function?.name, arguments: call.function?.arguments ?? '{}' }).catch((error) => `工具执行失败：${error instanceof Error ? error.message : '未知错误'}`);
+        const name = String(call.function?.name ?? ''); const raw = String(call.function?.arguments ?? '{}');
+        const result = await this.executeTool(name, raw, localContext).catch((error) => `工具执行失败：${error instanceof Error ? error.message : '未知错误'}`);
         conversation.push({ role: 'tool', tool_call_id: call.id, content: result });
       }
     }
     if (!text) text = '工具调用已达到十轮上限，请根据当前结果继续下一步。';
     for (const chunk of text.match(/[\s\S]{1,16}/g) ?? [text]) yield chunk;
+  }
+  private executeTool(name: string, raw: string, localContext?: { userId: string; workspaceId: string }) {
+    if (localContext && ['read_file', 'write_file', 'run_command'].includes(name)) {
+      let input: Record<string, unknown>; try { input = JSON.parse(raw || '{}'); } catch { throw new ServiceUnavailableException('本机工具参数不是有效 JSON'); }
+      return this.localActions.request(localContext.userId, localContext.workspaceId, name, input);
+    }
+    return this.tools.execute({ name, arguments: raw });
   }
   private keyFor(entry: PublicModel) {
     if (entry.provider === 'siliconflow') return process.env.SILICONFLOW_API_KEY;

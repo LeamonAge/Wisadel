@@ -138,7 +138,7 @@ export class ApiClient {
   private openMessageStream(sessionId: string, clientId: string, content: string, imageUrls: string[], attachments: Attachment[], currentParams: SdParams) {
     return fetch(`${API_URL}/chat/sessions/${sessionId}/messages/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}`, ...(localStorage.getItem('wisadel.workspaceId') ? { 'X-Wisadel-Workspace-Id': localStorage.getItem('wisadel.workspaceId')! } : {}) },
       body: JSON.stringify({ clientId, content, imageUrls, attachments, currentParams })
     });
   }

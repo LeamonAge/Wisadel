@@ -115,7 +115,9 @@ export class ChatController {
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
       } else {
-      for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item))) {
+      const workspaceId = request.header('x-wisadel-workspace-id');
+      const localContext = workspaceId ? { userId: user.sub, workspaceId } : undefined;
+      for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext)) {
         answer += chunk;
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
