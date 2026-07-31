@@ -9,6 +9,7 @@ interface Window {
     openImageStudio: () => Promise<void>;
     captureScreen: () => Promise<string>;
     chooseWorkspace: () => Promise<string | null>;
+    workspaceContext: (workspacePath: string) => Promise<{ root: string; tree: Array<{ path: string; kind: 'file' | 'directory' }>; project: { languages: string[]; suggestedCommands: string[] }; git: { branch: string; status: string } }>;
     setTheme: (theme: 'dark' | 'light', chromeColor?: string) => Promise<void>;
     setProviderSecret: (providerId: string, secret: string) => Promise<void>;
   };
