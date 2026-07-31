@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
+import { BrowserAutomationService } from './browser-automation.service';
 
 type ToolCall = { name: string; arguments: string };
 
@@ -15,6 +16,7 @@ const MAX_FILE_BYTES = 512_000;
 
 @Injectable()
 export class AgentToolsService {
+  constructor(private readonly browser: BrowserAutomationService = {} as BrowserAutomationService) {}
   readonly definitions = [
     this.tool('list_files', '列出工作区内的文件和目录。', {
       path: { type: 'string', description: '相对工作区的目录，默认为 .' },
@@ -61,7 +63,14 @@ export class AgentToolsService {
     this.tool('search_web', '检索公开网页资料。游戏、动画、漫画、角色设定优先检索 Bilibili；短视频热点优先检索抖音；其他内容使用通用公开网页搜索。返回可核查的标题、摘要和链接。', {
       query: { type: 'string', description: '要检索的关键词或问题' },
       source: { type: 'string', enum: ['auto', 'bilibili', 'douyin', 'web'], description: '检索来源偏好，默认 auto' }
-    }, ['query'])
+    }, ['query']),
+    this.tool('browser_open', 'Open a public web page.', { url: { type: 'string' } }, ['url']),
+    this.tool('browser_click', 'Click a CSS selector in the current browser page.', { selector: { type: 'string' } }, ['selector']),
+    this.tool('browser_fill', 'Fill text into a CSS selector in the current browser page.', { selector: { type: 'string' }, text: { type: 'string' } }, ['selector', 'text']),
+    this.tool('browser_scroll', 'Scroll the current browser page.', { amount: { type: 'integer' } }, ['amount']),
+    this.tool('browser_read', 'Read the title, URL, and visible text of the current page.', {}),
+    this.tool('browser_screenshot', 'Save a full-page screenshot into the authorized workspace.', { name: { type: 'string' } }),
+    this.tool('browser_close', 'Close the current browser session.', {})
   ];
 
   get workspaceRoot() { return resolve(process.env.AGENT_WORKSPACE_ROOT ?? process.cwd()); }
@@ -81,6 +90,13 @@ export class AgentToolsService {
       case 'download_file': return this.downloadFile(this.string(args.url), this.string(args.destination));
       case 'fetch_web_page': return this.fetchWebPage(this.string(args.url));
       case 'search_web': return this.searchWeb(this.string(args.query), this.string(args.source, 'auto'));
+      case 'browser_open': return this.browser.open(this.string(args.url));
+      case 'browser_click': return this.browser.click(this.string(args.selector));
+      case 'browser_fill': return this.browser.fill(this.string(args.selector), this.string(args.text));
+      case 'browser_scroll': return this.browser.scroll(this.number(args.amount, 700));
+      case 'browser_read': return this.browser.read();
+      case 'browser_screenshot': return this.browser.screenshot(this.string(args.name, 'browser-page'));
+      case 'browser_close': return this.browser.close();
       default: throw new BadRequestException(`未知工具：${call.name}`);
     }
   }

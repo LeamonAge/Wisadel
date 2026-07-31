@@ -1,6 +1,8 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import type { Message } from '@wisadel/contracts';
 import { DeepSeekService, type SettledModelUsage } from './deepseek.service';
+import { AgentToolsService } from './agent-tools.service';
+import { buildAgentSystemPrompt } from './agent-prompt';
 
 export type PublicModel = { id: string; provider: string; family: string; name: string; modality: 'text' };
 
@@ -43,7 +45,7 @@ const CATALOGUE: PublicModel[] = [
 
 @Injectable()
 export class ProviderRouterService {
-  constructor(private readonly deepseek: DeepSeekService) {}
+  constructor(private readonly deepseek: DeepSeekService, private readonly tools: AgentToolsService) {}
   catalogue() { return CATALOGUE.filter((entry) => Boolean(this.keyFor(entry))); }
   defaultModel() { return 'deepseek-ai/DeepSeek-V4-Flash'; }
   async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void): AsyncGenerator<string> {
@@ -51,11 +53,25 @@ export class ProviderRouterService {
     if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage); return; }
     const key = this.keyFor(entry); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
     if (!key) throw new ServiceUnavailableException(`${entry.provider} API 未配置`);
-    const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: false, messages: [...messages.slice(-18).map((m) => ({ role: m.role, content: m.content })), { role: 'user', content: latest }], temperature: 0.2 }) });
-    const body = await response.json().catch(() => ({})) as any;
-    if (!response.ok) throw new ServiceUnavailableException(body?.error?.message ?? `${entry.provider} 请求失败 (${response.status})`);
-    const text = String(body?.choices?.[0]?.message?.content ?? '');
-    if (body?.usage) onUsage?.({ model: body.model ?? model, inputTokens: body.usage.prompt_tokens ?? 0, outputTokens: body.usage.completion_tokens ?? 0 });
+    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...messages.slice(-18).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
+    let text = '';
+    for (let turn = 0; turn < 10; turn += 1) {
+      const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: false, messages: conversation, tools: this.tools.definitions, tool_choice: 'auto', temperature: 0.2 }) });
+      const body = await response.json().catch(() => ({})) as any;
+      if (!response.ok) throw new ServiceUnavailableException(body?.error?.message ?? `${entry.provider} 请求失败 (${response.status})`);
+      if (body?.usage) onUsage?.({ model: body.model ?? model, inputTokens: body.usage.prompt_tokens ?? 0, outputTokens: body.usage.completion_tokens ?? 0 });
+      const message = body?.choices?.[0]?.message;
+      if (!message) throw new ServiceUnavailableException(`${entry.provider} 没有返回有效消息`);
+      const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+      if (!calls.length) { text = String(message.content ?? '任务已完成。'); break; }
+      conversation.push({ role: 'assistant', content: message.content ?? null, tool_calls: calls });
+      onProgress?.('正在执行 Agent 工具');
+      for (const call of calls) {
+        const result = await this.tools.execute({ name: call.function?.name, arguments: call.function?.arguments ?? '{}' }).catch((error) => `工具执行失败：${error instanceof Error ? error.message : '未知错误'}`);
+        conversation.push({ role: 'tool', tool_call_id: call.id, content: result });
+      }
+    }
+    if (!text) text = '工具调用已达到十轮上限，请根据当前结果继续下一步。';
     for (const chunk of text.match(/[\s\S]{1,16}/g) ?? [text]) yield chunk;
   }
   private keyFor(entry: PublicModel) {

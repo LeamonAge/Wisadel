@@ -5,6 +5,7 @@ COPY tsconfig.base.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci
+RUN npx playwright install --with-deps chromium
 COPY packages/contracts packages/contracts
 COPY apps/api apps/api
 RUN npm run build -w @wisadel/contracts && npm run db:generate -w @wisadel/api && npm run build -w @wisadel/api
