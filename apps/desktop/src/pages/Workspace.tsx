@@ -8,9 +8,11 @@ import {
 } from 'react';
 import {
   Blocks,
+  BookOpen,
   Bot,
   ChevronDown,
   CircleUserRound,
+  Copy,
   Download,
   Ellipsis,
   Eye,
@@ -58,10 +60,17 @@ import '../workspace-editor.css';
 
 const navItems = [
   { id: 'chat', label: '对话', icon: MessageSquare },
+  { id: 'writing', label: '写作大师', icon: BookOpen },
   { id: 'models', label: '模型', icon: Layers3 },
   { id: 'extensions', label: '扩展', icon: Blocks },
   { id: 'plugins', label: '插件', icon: Zap }
 ] as const;
+
+function renderMessageContent(content: string) {
+  return content.split(/```/).map((part, index) => index % 2
+    ? <pre className="message-code" key={`${index}-${part.slice(0, 24)}`}><code>{part.replace(/^\w*\n/, '')}</code></pre>
+    : part.split('\n').map((line, lineIndex) => <span key={`${index}-${lineIndex}`}>{line}{lineIndex < part.split('\n').length - 1 && <br />}</span>));
+}
 
 export function Workspace({
   onLogout,
@@ -165,6 +174,8 @@ export function Workspace({
         )}
         {page === 'chat' || page === 'image' ? (
           <Conversation sidebarOpen={sidebarOpen} onOpenSidebar={() => setSidebarOpen(true)} />
+        ) : page === 'writing' ? (
+          <WritingMaster />
         ) : (
           <PlaceholderPage page={page} />
         )}
@@ -870,6 +881,7 @@ function Conversation({
   const reasoningCollapsed = useAppStore((state) => state.reasoningCollapsed);
   const setReasoningCollapsed = useAppStore((state) => state.setReasoningCollapsed);
   const send = useAppStore((state) => state.sendMessage);
+  const cancelMessage = useAppStore((state) => state.cancelMessage);
   const pendingImages = useAppStore((state) => state.pendingImageUrls);
   const pendingAttachments = useAppStore((state) => state.pendingAttachments);
   const uploading = useAppStore((state) => state.uploadingFile);
@@ -878,6 +890,7 @@ function Conversation({
   const removePending = useAppStore((state) => state.removePendingImage);
   const attachImage = useAppStore((state) => state.attachImage);
   const previewImage = useAppStore((state) => state.setPreviewImage);
+  const latestAssistantId = [...messages].reverse().find((message) => message.role === 'assistant')?.id;
   const reloadSession = useAppStore((state) => state.selectSession);
   const [input, setInput] = useState('');
   const [capturing, setCapturing] = useState(false);
@@ -1089,7 +1102,23 @@ function Conversation({
                   })}
                 </span>
               </div>
-              <div className="message-content">{message.content}</div>
+              <div className="message-content">{renderMessageContent(message.content)}</div>
+              {message.role === 'assistant' && (
+                <div className="message-actions">
+                  <button title="复制回复" onClick={() => void navigator.clipboard?.writeText(message.content)}><Copy size={14} /></button>
+                  <button title="继续生成" onClick={() => void send('请继续上一条回复。')}><ChevronDown size={14} /></button>
+                  <button title="重新生成" onClick={() => void send('请基于本轮用户需求重新生成上一条回复。')}><RotateCcw size={14} /></button>
+                </div>
+              )}
+              {message.role === 'assistant' && message.id === latestAssistantId && !sending && !!(message.trace?.length || reasoningSteps.length) && (
+                <details className="reasoning-panel" open={!reasoningCollapsed}>
+                  <summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}>
+                    <Sparkles size={14} />
+                    执行过程
+                  </summary>
+                  <div>{(message.trace?.length ? message.trace : reasoningSteps).map((step, index) => <p key={`${step}-${index}`}><i>{index + 1}</i>{step}</p>)}</div>
+                </details>
+              )}
               {!!message.imageUrls.length && (
                 <div className="message-images">
                   {message.imageUrls.map((url) => (
@@ -1128,24 +1157,6 @@ function Conversation({
             </div>
           </div>
         ))}
-        {!!reasoningSteps.length && (
-          <details className="reasoning-panel" open={!reasoningCollapsed}>
-            <summary
-              onClick={(event) => {
-                event.preventDefault();
-                setReasoningCollapsed(!reasoningCollapsed);
-              }}
-            >
-              <Sparkles size={14} />
-              {sending ? '正在思考与执行' : '思考与执行过程'}
-            </summary>
-            <div>
-              {reasoningSteps.map((step, index) => (
-                <p key={`${step}-${index}`}>{step}</p>
-              ))}
-            </div>
-          </details>
-        )}
         {streaming && (
           <div className="message assistant">
             <div className="message-avatar">
@@ -1155,7 +1166,16 @@ function Conversation({
               <div className="message-meta">
                 Wisadel<span>正在输入</span>
               </div>
-              <div className="message-content streaming">{streaming}</div>
+              <div className="message-content streaming">{renderMessageContent(streaming)}</div>
+              {!!reasoningSteps.length && (
+                <details className="reasoning-panel" open={!reasoningCollapsed}>
+                  <summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}>
+                    <Sparkles size={14} />
+                    正在思考与执行
+                  </summary>
+                  <div>{reasoningSteps.map((step, index) => <p key={`${step}-${index}`}><i>{index + 1}</i>{step}</p>)}</div>
+                </details>
+              )}
             </div>
           </div>
         )}
@@ -1273,10 +1293,9 @@ function Conversation({
             <button
               type="button"
               className="send-command"
-              onClick={submit}
+              onClick={sending ? cancelMessage : submit}
               disabled={
                 (!input.trim() && !pendingImages.length && !pendingAttachments.length) ||
-                sending ||
                 uploading ||
                 !activeId
               }
@@ -2105,6 +2124,18 @@ function ImageViewer() {
       <img src={url} alt="大图预览" onMouseDown={(event) => event.stopPropagation()} />
     </div>
   );
+}
+
+function WritingMaster() {
+  const [style, setStyle] = useState('fantasy');
+  const [customStyle, setCustomStyle] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [history, setHistory] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [busy, setBusy] = useState(false);
+  const styles = [['fantasy', '玄幻'], ['western_fantasy', '奇幻'], ['wuxia', '武侠'], ['romance', '言情'], ['sci_fi', '科幻'], ['mystery', '悬疑'], ['thriller', '惊悚'], ['historical', '历史'], ['military', '军事'], ['urban', '都市'], ['youth', '青春'], ['detective', '侦探'], ['horror', '恐怖'], ['fanfiction', '同人']];
+  const submit = async () => { if (!prompt.trim() || busy) return; setBusy(true); try { const result = await api.writingMaster({ prompt, style, customStyle, history }); setAnswer(result.content); setHistory((value) => `${value}\n用户：${prompt}\n写作大师：${result.content}`.trim()); setPrompt(''); } catch (error) { setAnswer(error instanceof Error ? error.message : '写作请求失败'); } finally { setBusy(false); } };
+  return <main className="writing-master"><section className="writing-chat"><header><span>WRITING MASTER</span><h1>写作大师</h1><p>DeepSeek Pro 双重生成与审校</p></header><div className="writing-output">{answer || '描述你想写的场景、人物或章节目标。'}</div><div className="writing-composer"><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="输入本轮写作要求" /><button onClick={() => void submit()} disabled={busy || !prompt.trim()}>{busy ? '生成中' : '生成'}</button></div></section><aside className="writing-options"><h2>写作风格</h2><div className="writing-style-grid">{styles.map(([id, label]) => <button key={id} className={style === id ? 'active' : ''} onClick={() => setStyle(id ?? 'fantasy')}>{label}</button>)}</div><label>个性化风格<textarea value={customStyle} onChange={(event) => setCustomStyle(event.target.value)} placeholder="描述语言、节奏、叙事偏好" /></label></aside></main>;
 }
 
 function PlaceholderPage({ page }: { page: 'models' | 'extensions' | 'plugins' }) {

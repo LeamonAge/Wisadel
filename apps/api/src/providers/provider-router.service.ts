@@ -49,15 +49,16 @@ export class ProviderRouterService {
   constructor(private readonly deepseek: DeepSeekService, private readonly tools: AgentToolsService, private readonly localActions: LocalAgentActionService) {}
   catalogue() { return CATALOGUE.filter((entry) => Boolean(this.keyFor(entry))); }
   defaultModel() { return 'deepseek-ai/DeepSeek-V4-Flash'; }
-  async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }, profileInstructions?: string): AsyncGenerator<string> {
+  async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }, profileInstructions?: string, signal?: AbortSignal): AsyncGenerator<string> {
     const entry = CATALOGUE.find((item) => item.id === model) ?? CATALOGUE[0];
-    if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage, localContext, profileInstructions); return; }
+    if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage, localContext, profileInstructions, signal); return; }
     const key = this.keyFor(entry); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
     if (!key) throw new ServiceUnavailableException(`${entry.provider} API 未配置`);
-    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...(profileInstructions ? [{ role: 'system', content: `User-selected working style. Follow it when compatible with the fixed safety rules:\n${profileInstructions.slice(0, 12000)}` }] : []), ...messages.slice(-18).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
+    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...(profileInstructions ? [{ role: 'system', content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []), ...messages.slice(-18).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
     let text = '';
     for (let turn = 0; turn < 10; turn += 1) {
-      const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: false, messages: conversation, tools: this.tools.definitions, tool_choice: 'auto', temperature: 0.2 }) });
+      if (signal?.aborted) return;
+      const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', signal, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: false, messages: conversation, tools: this.tools.definitions, tool_choice: 'auto', temperature: 0.2 }) });
       const body = await response.json().catch(() => ({})) as any;
       if (!response.ok) throw new ServiceUnavailableException(body?.error?.message ?? `${entry.provider} 请求失败 (${response.status})`);
       if (body?.usage) onUsage?.({ model: body.model ?? model, inputTokens: body.usage.prompt_tokens ?? 0, outputTokens: body.usage.completion_tokens ?? 0 });
@@ -68,6 +69,7 @@ export class ProviderRouterService {
       conversation.push({ role: 'assistant', content: message.content ?? null, tool_calls: calls });
       onProgress?.('正在执行 Agent 工具');
       for (const call of calls) {
+        if (signal?.aborted) return;
         const name = String(call.function?.name ?? ''); const raw = String(call.function?.arguments ?? '{}');
         const result = await this.executeTool(name, raw, localContext).catch((error) => `工具执行失败：${error instanceof Error ? error.message : '未知错误'}`);
         conversation.push({ role: 'tool', tool_call_id: call.id, content: result });

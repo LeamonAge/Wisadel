@@ -30,7 +30,7 @@ const withSdDefaults = (params: Partial<SdParams>): SdParams => ({
   ...params
 });
 
-type Page = SessionKind | 'models' | 'extensions' | 'plugins';
+type Page = SessionKind | 'writing' | 'models' | 'extensions' | 'plugins';
 type Theme = 'dark' | 'light';
 export type AppearanceMode = Theme | 'custom';
 export type Language = 'zh-CN' | 'zh-TW' | 'en';
@@ -84,6 +84,7 @@ interface AppState {
   deleteSession: (id: string) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
   sendMessage: (content: string, imageUrls?: string[], attachments?: Attachment[]) => Promise<void>;
+  cancelMessage: () => void;
   setSettingsOpen: (open: boolean) => void;
   updateSdParams: (params: Partial<SdParams>) => void;
   loadSdCapabilities: () => Promise<void>;
@@ -284,6 +285,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       status: 'sending',
       imageUrls,
       attachments,
+      trace: [],
       createdAt: new Date().toISOString()
     };
     set((state) => ({ messages: [...state.messages, optimistic], sending: true, streamingText: '', reasoningSteps: ['正在准备请求'], reasoningCollapsed: false, sendError: null, pendingImageUrls: [], pendingAttachments: [] }));
@@ -329,15 +331,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       delete conversationCache[originPage];
       if (!isCurrent()) return;
       set((state) => ({
-        messages: state.messages.map((message) => message.id === optimistic.id ? { ...message, status: 'failed' as const } : message),
+        messages: state.messages.map((message) => message.id === optimistic.id ? { ...message, status: error instanceof DOMException && error.name === 'AbortError' ? 'sent' as const : 'failed' as const } : message),
         sending: false,
         streamingText: '',
         reasoningCollapsed: true,
-        sendError: error instanceof Error ? error.message : '消息发送失败',
+        sendError: error instanceof DOMException && error.name === 'AbortError' ? null : error instanceof Error ? error.message : '消息发送失败',
         pendingImageUrls: imageUrls,
         pendingAttachments: attachments
       }));
     }
+  },
+  cancelMessage: () => {
+    api.cancelStream();
+    set((state) => ({ sending: false, reasoningSteps: [...state.reasoningSteps, '已停止本轮生成'], reasoningCollapsed: false }));
   },
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPreviewImage: (previewImageUrl) => set({ previewImageUrl }),

@@ -8,6 +8,7 @@ export const AUTH_EXPIRED_EVENT = 'wisadel:auth-expired';
 export class ApiClient {
   private token = localStorage.getItem('wisadel.accessToken');
   private refreshToken = localStorage.getItem('wisadel.refreshToken');
+  private streamAbortController: AbortController | null = null;
 
   setTokens(accessToken: string | null, refreshToken: string | null = null) {
     this.token = accessToken;
@@ -48,7 +49,10 @@ export class ApiClient {
     this.setTokens(null, null);
   };
   sessions = (kind: SessionKind) => this.request<Session[]>(`/chat/sessions?kind=${kind}`);
+  archivedSessions = (kind?: SessionKind) => this.request<Session[]>(`/chat/sessions/archive/list${kind ? `?kind=${kind}` : ''}`);
+  restoreSession = (id: string) => this.request<Session>(`/chat/sessions/${id}/restore`, { method: 'POST' });
   models = () => this.request<{ models: PublicModel[] }>('/chat/models');
+  writingMaster = (input: { prompt: string; style: string; customStyle?: string; history?: string }) => this.request<{ content: string; reviewed: boolean; model: string }>('/writing-master', { method: 'POST', headers: { ...(localStorage.getItem('wisadel.workspaceId') ? { 'X-Wisadel-Workspace-Id': localStorage.getItem('wisadel.workspaceId')! } : {}) }, body: JSON.stringify(input) });
   workspaces = () => this.request<Workspace[]>('/workspaces');
   registerWorkspace = (path: string, name?: string) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify({ path, name }) });
   trustWorkspace = (id: string, trust: Workspace['trust']) => this.request<Workspace>(`/workspaces/${id}/trust`, { method: 'PATCH', body: JSON.stringify({ trust }) });
@@ -101,6 +105,7 @@ export class ApiClient {
 
   async streamMessage(sessionId: string, content: string, imageUrls: string[], attachments: Attachment[], currentParams: SdParams, onDelta: (delta: string) => void, onReasoning?: (label: string) => void, onParams?: (action: ImageAgentAction) => void, onImageTask?: (task: ImageTask) => void): Promise<Message> {
     const clientId = crypto.randomUUID();
+    this.streamAbortController = new AbortController();
     let response = await this.openMessageStream(sessionId, clientId, content, imageUrls, attachments, currentParams);
     if (response.status === 401 && this.refreshToken && await this.refreshAccess()) {
       response = await this.openMessageStream(sessionId, clientId, content, imageUrls, attachments, currentParams);
@@ -135,12 +140,16 @@ export class ApiClient {
       }
     }
     if (!result) throw new Error('流式响应意外中断');
+    this.streamAbortController = null;
     return result;
   }
+
+  cancelStream() { this.streamAbortController?.abort(); this.streamAbortController = null; }
 
   private openMessageStream(sessionId: string, clientId: string, content: string, imageUrls: string[], attachments: Attachment[], currentParams: SdParams) {
     return fetch(`${API_URL}/chat/sessions/${sessionId}/messages/stream`, {
       method: 'POST',
+      signal: this.streamAbortController?.signal,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}`, ...(localStorage.getItem('wisadel.workspaceId') ? { 'X-Wisadel-Workspace-Id': localStorage.getItem('wisadel.workspaceId')! } : {}) },
       body: JSON.stringify({ clientId, content, imageUrls, attachments, currentParams })
     });

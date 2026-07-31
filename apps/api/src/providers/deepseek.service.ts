@@ -21,7 +21,7 @@ export class DeepSeekService {
 
   get configured() { return Boolean(process.env.DEEPSEEK_API_KEY); }
 
-  async *stream(messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }, profileInstructions?: string): AsyncGenerator<string> {
+  async *stream(messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }, profileInstructions?: string, signal?: AbortSignal): AsyncGenerator<string> {
     if ((process.env.AI_MODE ?? 'mock') === 'mock' || !this.configured) {
       const text = `这是 Wisadel 的本地模拟回复。我已经收到：${latest}。配置 DeepSeek 环境变量后，这里会切换为真实 Agent。`;
       for (const chunk of text.match(/.{1,8}/gu) ?? [text]) { yield chunk; await new Promise((resolve) => setTimeout(resolve, 20)); }
@@ -37,7 +37,7 @@ export class DeepSeekService {
 
 文件工具仅限授权工作区。不得尝试读取环境变量、.env、凭据、密钥或绕过路径限制。不要覆盖与任务无关的内容。网页工具用于读取用户提供或任务需要的公开网页，不得探测本机、局域网或云元数据地址。使用自信、冷静、简洁且准确的中文回答。`
       },
-      ...(profileInstructions ? [{ role: 'system' as const, content: `User-selected working style. Follow it when compatible with the fixed safety rules:\n${profileInstructions.slice(0, 12000)}` }] : []),
+      ...(profileInstructions ? [{ role: 'system' as const, content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []),
       ...messages.slice(-18).map((message): ProviderMessage => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
       { role: 'user', content: latest }
     ];
@@ -48,7 +48,8 @@ export class DeepSeekService {
       const callCounts = new Map<string, number>();
       let stopReason = '';
       for (let turn = 0; turn < 10; turn += 1) {
-        const reply = await this.complete(conversation);
+        if (signal?.aborted) return;
+        const reply = await this.complete(conversation, true, process.env.DEEPSEEK_MODEL ?? 'deepseek-chat', signal);
         for (const usage of reply.usages) onUsage?.({ model: reply.model, inputTokens: usage.prompt_tokens ?? 0, outputTokens: usage.completion_tokens ?? 0 });
         const toolCalls = reply.message.tool_calls ?? [];
         if (!toolCalls.length) {
@@ -59,6 +60,7 @@ export class DeepSeekService {
         conversation.push({ role: 'assistant', content: reply.message.content ?? null, tool_calls: toolCalls });
         if (reply.message.content?.trim()) onProgress?.(reply.message.content.trim().replace(/\s+/g, ' ').slice(0, 300));
         for (const call of toolCalls) {
+          if (signal?.aborted) return;
           onProgress?.(this.toolLabel(call.function.name, call.function.arguments));
           const signature = `${call.function.name}:${call.function.arguments}`;
           const count = (callCounts.get(signature) ?? 0) + 1;
@@ -84,7 +86,7 @@ export class DeepSeekService {
           role: 'system',
           content: `工具执行阶段已经结束（${stopReason || '达到 10 轮安全上限'}）。现在禁止继续调用工具。请根据已有工具结果直接给出最终答复：说明实际完成的修改、尚未完成的部分及具体原因；不要声称仍需调用工具，也不要输出“工具调用达到上限”。`
         });
-        const closing = await this.complete(conversation, false);
+        const closing = await this.complete(conversation, false, process.env.DEEPSEEK_MODEL ?? 'deepseek-chat', signal);
         for (const usage of closing.usages) onUsage?.({ model: closing.model, inputTokens: usage.prompt_tokens ?? 0, outputTokens: usage.completion_tokens ?? 0 });
         finalText = closing.message.content?.trim() || '本轮工具执行已结束，但模型没有返回总结。已有修改将保留。';
       }
@@ -113,13 +115,13 @@ export class DeepSeekService {
     return detail ? `${label}：${detail}` : label;
   }
 
-  private async complete(messages: ProviderMessage[], allowTools = true, model = process.env.DEEPSEEK_MODEL ?? 'deepseek-chat'): Promise<ProviderReply> {
+  private async complete(messages: ProviderMessage[], allowTools = true, model = process.env.DEEPSEEK_MODEL ?? 'deepseek-chat', signal?: AbortSignal): Promise<ProviderReply> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120_000);
     try {
       const response = await fetch(`${(process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
-        signal: controller.signal,
+        signal: signal ?? controller.signal,
         headers: { Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,

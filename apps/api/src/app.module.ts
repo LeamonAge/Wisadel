@@ -31,6 +31,8 @@ import { ProjectContextController } from './modules/project-context.controller';
 import { ProjectContextService } from './modules/project-context.service';
 import { LocalAgentActionController } from './modules/local-agent-action.controller';
 import { LocalAgentActionService } from './modules/local-agent-action.service';
+import { WritingMasterController } from './modules/writing-master.controller';
+import { WritingMasterService } from './modules/writing-master.service';
 
 @Module({
   imports: [
@@ -41,7 +43,7 @@ import { LocalAgentActionService } from './modules/local-agent-action.service';
       signOptions: { expiresIn: '15m' }
     })
   ],
-  controllers: [AuthController, ChatController, ImageController, UploadController, HealthController, AdminController, BillingController, AgentTaskController, WorkspaceController, ProjectContextController, LocalAgentActionController],
-  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, BrowserAutomationService, AgentToolsService, DeepSeekService, ProviderRouterService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService, WorkspaceService, ProjectContextService, LocalAgentActionService]
+  controllers: [AuthController, ChatController, ImageController, UploadController, HealthController, AdminController, BillingController, AgentTaskController, WorkspaceController, ProjectContextController, LocalAgentActionController, WritingMasterController],
+  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, BrowserAutomationService, AgentToolsService, DeepSeekService, ProviderRouterService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService, WorkspaceService, ProjectContextService, LocalAgentActionService, WritingMasterService]
 })
 export class AppModule {}

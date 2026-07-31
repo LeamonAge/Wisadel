@@ -79,6 +79,7 @@ export const messageSchema = z.object({
   status: messageStatusSchema,
   imageUrls: z.array(z.string().url()).max(4).default([]),
   attachments: z.array(attachmentSchema).max(8).default([]),
+  trace: z.array(z.string().min(1).max(500)).max(20).default([]),
   createdAt: z.string().datetime()
 });
 

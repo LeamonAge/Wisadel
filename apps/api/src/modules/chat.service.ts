@@ -33,6 +33,14 @@ export class ChatService {
     return { deleted: true };
   }
 
+  listArchivedSessions(userId: string, kind?: string) { return this.store.listArchivedSessions(userId, kind); }
+
+  async restoreSession(userId: string, id: string) {
+    const session = await this.store.restoreSession(userId, id);
+    if (!session) throw new NotFoundException('归档会话不存在或已超过保留期限');
+    return session;
+  }
+
   async listMessages(userId: string, sessionId: string): Promise<Message[]> {
     await this.getOwnedSession(userId, sessionId);
     return this.store.listMessages(userId, sessionId);
@@ -50,8 +58,8 @@ export class ChatService {
     return message;
   }
 
-  addAssistantMessage(sessionId: string, content: string): Promise<Message> {
-    return this.store.addMessage({ sessionId, clientId: `server-${randomUUID()}`, role: 'assistant', content });
+  addAssistantMessage(sessionId: string, content: string, trace: string[] = []): Promise<Message> {
+    return this.store.addMessage({ sessionId, clientId: `server-${randomUUID()}`, role: 'assistant', content, trace });
   }
 
   async getOwnedSession(userId: string, id: string) {

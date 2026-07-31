@@ -58,6 +58,12 @@ export class ChatController {
     return this.chat.deleteSession(currentUser(request).sub, id);
   }
 
+  @Get('sessions/archive/list')
+  archived(@Req() request: Request, @Query('kind') kind?: string) { return this.chat.listArchivedSessions(currentUser(request).sub, kind); }
+
+  @Post('sessions/:id/restore')
+  restore(@Req() request: Request, @Param('id') id: string) { return this.chat.restoreSession(currentUser(request).sub, id); }
+
   @Get('sessions/:id/messages')
   messages(@Req() request: Request, @Param('id') id: string) {
     return this.chat.listMessages(currentUser(request).sub, id);
@@ -83,9 +89,16 @@ export class ChatController {
     response.write(`event: accepted\ndata: ${JSON.stringify(userMessage)}\n\n`);
 
     try {
+      const abortController = new AbortController();
+      request.once('close', () => abortController.abort());
       let answer = '';
       const usage: SettledModelUsage[] = [];
-      const sendReasoning = (label: string) => response.write(`event: reasoning\ndata: ${JSON.stringify({ label })}\n\n`);
+      const trace: string[] = [];
+      const sendReasoning = (label: string) => {
+        const safeLabel = label.replace(/(?:\.env|api[_ -]?key|token|password|secret)\S*/gi, '[已隐藏]').replace(/([A-Za-z]:)?[\\/][^\s]{1,180}/g, '[路径已隐藏]').slice(0, 500);
+        if (safeLabel && trace.at(-1) !== safeLabel) trace.push(safeLabel);
+        response.write(`event: reasoning\ndata: ${JSON.stringify({ label: safeLabel })}\n\n`);
+      };
       const attachmentTexts = await Promise.all((input.attachments ?? []).map(async (attachment) => {
       const text = await this.storage.attachmentText(attachment.url, attachment.mimeType).catch(() => null);
       return text ? `\n\n附件 ${attachment.name}（URL: ${attachment.url}）：\n${text}` : `\n\n附件：${attachment.name}（${attachment.mimeType}，URL: ${attachment.url}，二进制文件可使用 copy_uploaded_file 复制）`;
@@ -122,12 +135,12 @@ export class ChatController {
       const workspace = workspaceId ? (await this.workspaces.list(user.sub)).find((item) => item.id === workspaceId && item.trust === 'TRUSTED') : undefined;
       const settings = workspace?.settings;
       const profile = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings.agentProfile as { instructions?: string } | undefined : undefined;
-      for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, profile?.instructions)) {
+      for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, profile?.instructions, abortController.signal)) {
         answer += chunk;
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
       }
-      const assistant = await this.chat.addAssistantMessage(id, answer);
+      const assistant = await this.chat.addAssistantMessage(id, answer, trace.slice(-20));
       if (session.kind === 'chat' && usage.length) {
       const entries = await this.billing.settleChatUsage(user.sub, usage);
       const latest = entries.at(-1);
