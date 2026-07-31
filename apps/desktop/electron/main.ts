@@ -9,8 +9,27 @@ let imageStudioWindow: BrowserWindow | null = null;
 let lastUpdateEvent: object | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+const alwaysApproved = new Set<string>();
 const LOCAL_IGNORE = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.env']);
 const LOCAL_TEXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.rs', '.java', '.cs', '.json', '.md', '.css', '.html', '.yml', '.yaml', '.toml']);
+const LOCAL_SECRET = /(^|[\\/])(\.env(?:\..*)?|\.npmrc|\.pypirc|id_rsa|id_ed25519|credentials|secrets?)([\\/]|$)/i;
+const LOCAL_PROGRAMS = new Set(['node', 'node.exe', 'npm', 'npm.cmd', 'npx', 'npx.cmd', 'python', 'python.exe', 'pytest', 'git', 'git.exe', 'cargo', 'cargo.exe', 'go', 'go.exe']);
+
+const agentPath = (workspace: string, relativePath: string) => {
+  if (!relativePath || path.isAbsolute(relativePath)) throw new Error('必须使用工作区相对路径');
+  const root = path.resolve(workspace); const target = path.resolve(root, relativePath); const rel = path.relative(root, target);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || LOCAL_SECRET.test(rel)) throw new Error('路径不在工作区内或属于敏感文件');
+  return target;
+};
+const approveLocalAction = async (event: Electron.IpcMainInvokeEvent, workspace: string, scope: 'write' | 'command', title: string, detail: string) => {
+  const key = `${path.resolve(workspace).toLowerCase()}|${scope}`;
+  if (alwaysApproved.has(key)) return;
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const options = { type: 'warning' as const, buttons: ['拒绝', '允许一次', '本工作区始终允许'], defaultId: 0, cancelId: 0, title, message: 'Wisadel Agent 请求本机操作', detail };
+  const answer = window ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options);
+  if (answer.response === 2) { alwaysApproved.add(key); return; }
+  if (answer.response !== 1) throw new Error('用户拒绝本机 Agent 操作');
+};
 
 const localWorkspaceContext = async (input: string) => {
   const root = path.resolve(input);
@@ -205,6 +224,22 @@ app.whenReady().then(() => {
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
   ipcMain.handle('wisadel:workspace-context', (_event, workspacePath: string) => localWorkspaceContext(workspacePath));
+  ipcMain.handle('wisadel:agent-read-file', async (_event, workspacePath: string, relativePath: string) => {
+    const target = agentPath(workspacePath, relativePath);
+    if (!LOCAL_TEXT.has(path.extname(target).toLowerCase()) || (await fs.stat(target)).size > 512_000) throw new Error('仅可读取小于 512KB 的文本/代码文件');
+    return fs.readFile(target, 'utf8');
+  });
+  ipcMain.handle('wisadel:agent-write-file', async (event, workspacePath: string, relativePath: string, content: string) => {
+    const target = agentPath(workspacePath, relativePath);
+    if (!LOCAL_TEXT.has(path.extname(target).toLowerCase()) || Buffer.byteLength(content, 'utf8') > 512_000) throw new Error('仅可写入小于 512KB 的文本/代码文件');
+    await approveLocalAction(event, workspacePath, 'write', '写入本机文件', `${relativePath}\n${Buffer.byteLength(content, 'utf8')} bytes`);
+    await fs.mkdir(path.dirname(target), { recursive: true }); await fs.writeFile(target, content, 'utf8'); return { path: relativePath, bytes: Buffer.byteLength(content, 'utf8') };
+  });
+  ipcMain.handle('wisadel:agent-run-command', async (event, workspacePath: string, program: string, args: string[] = []) => {
+    if (!LOCAL_PROGRAMS.has(program.toLowerCase()) || args.length > 64 || args.some((arg) => typeof arg !== 'string' || arg.length > 2000)) throw new Error('程序或参数不在允许范围内');
+    const root = path.resolve(workspacePath); await approveLocalAction(event, workspacePath, 'command', '运行本机命令', `${program} ${args.join(' ')}`.slice(0, 1600));
+    return new Promise<{ code: number; output: string }>((resolveResult, reject) => { const child = spawn(program, args, { cwd: root, windowsHide: true, shell: false, env: Object.fromEntries(Object.entries(process.env).filter(([key]) => !/(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i.test(key))) }); let output = ''; const timer = setTimeout(() => { child.kill(); reject(new Error('命令超过 120 秒，已终止')); }, 120_000); child.stdout.on('data', (chunk) => output = (output + chunk).slice(-40_000)); child.stderr.on('data', (chunk) => output = (output + chunk).slice(-40_000)); child.on('error', (error) => { clearTimeout(timer); reject(error); }); child.on('close', (code) => { clearTimeout(timer); resolveResult({ code: code ?? -1, output }); }); });
+  });
   createWindow();
   createTray();
   configureAutoUpdate();

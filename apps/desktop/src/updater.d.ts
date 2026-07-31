@@ -10,6 +10,9 @@ interface Window {
     captureScreen: () => Promise<string>;
     chooseWorkspace: () => Promise<string | null>;
     workspaceContext: (workspacePath: string) => Promise<{ root: string; tree: Array<{ path: string; kind: 'file' | 'directory' }>; project: { languages: string[]; suggestedCommands: string[] }; git: { branch: string; status: string } }>;
+    agentReadFile: (workspacePath: string, relativePath: string) => Promise<string>;
+    agentWriteFile: (workspacePath: string, relativePath: string, content: string) => Promise<{ path: string; bytes: number }>;
+    agentRunCommand: (workspacePath: string, program: string, args: string[]) => Promise<{ code: number; output: string }>;
     setTheme: (theme: 'dark' | 'light', chromeColor?: string) => Promise<void>;
     setProviderSecret: (providerId: string, secret: string) => Promise<void>;
   };
