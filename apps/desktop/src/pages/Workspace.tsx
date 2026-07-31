@@ -182,6 +182,7 @@ export function Workspace({
         {page === 'image' && <ImageInspector />}
       </div>
       <SettingsDialog />
+      <ProfileEditor />
       <ImageViewer />
       {!standaloneImage && <LocalAgentRunner />}
       {!standaloneImage && <WorkspaceAuditPanel />}
@@ -862,6 +863,9 @@ function Conversation({
   const streaming = useAppStore((state) => state.streamingText);
   const sending = useAppStore((state) => state.sending);
   const sendError = useAppStore((state) => state.sendError);
+  const currentUser = useAppStore((state) => state.user)!;
+  const [assistantProfile, setAssistantProfile] = useState(() => JSON.parse(localStorage.getItem('wisadel.assistantProfile') ?? '{"name":"Wisadel","avatarUrl":""}') as { name: string; avatarUrl: string });
+  useEffect(() => { const refresh = () => setAssistantProfile(JSON.parse(localStorage.getItem('wisadel.assistantProfile') ?? '{"name":"Wisadel","avatarUrl":""}')); window.addEventListener('wisadel:assistant-profile', refresh); return () => window.removeEventListener('wisadel:assistant-profile', refresh); }, []);
   const reasoningSteps = useAppStore((state) => state.reasoningSteps);
   const reasoningCollapsed = useAppStore((state) => state.reasoningCollapsed);
   const setReasoningCollapsed = useAppStore((state) => state.setReasoningCollapsed);
@@ -1072,9 +1076,9 @@ function Conversation({
         )}
         {messages.map((message) => (
           <div key={message.id} className={`message ${message.role}`}>
-            <div className="message-avatar">
-              {message.role === 'user' ? <CircleUserRound size={18} /> : <Sparkles size={17} />}
-            </div>
+            <button className="message-avatar" onClick={() => window.dispatchEvent(new CustomEvent('wisadel:edit-profile', { detail: message.role === 'user' ? 'user' : 'assistant' }))} title={message.role === 'user' ? '编辑用户资料' : '编辑 AI 资料'}>
+              {message.role === 'user' ? (currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt="" /> : <CircleUserRound size={18} />) : (assistantProfile.avatarUrl ? <img src={assistantProfile.avatarUrl} alt="" /> : <Sparkles size={17} />)}
+            </button>
             <div className="message-body">
               <div className="message-meta">
                 {message.role === 'user' ? '你' : page === 'chat' ? 'Wisadel' : '创意画师'}
@@ -2186,6 +2190,17 @@ function ModelsCatalog() {
   );
 }
 
+function ProfileEditor() {
+  const user = useAppStore((state) => state.user)!;
+  const setUser = useAppStore((state) => state.setUser);
+  const [kind, setKind] = useState<'user' | 'assistant' | null>(null);
+  const [name, setName] = useState(''); const [avatar, setAvatar] = useState(''); const [error, setError] = useState('');
+  useEffect(() => { const open = (event: Event) => { const next = (event as CustomEvent<'user' | 'assistant'>).detail; setKind(next); const assistant = JSON.parse(localStorage.getItem('wisadel.assistantProfile') ?? '{"name":"Wisadel","avatarUrl":""}'); setName(next === 'user' ? user.nickname : assistant.name ?? 'Wisadel'); setAvatar(next === 'user' ? user.avatarUrl ?? '' : assistant.avatarUrl ?? ''); setError(''); }; window.addEventListener('wisadel:edit-profile', open); return () => window.removeEventListener('wisadel:edit-profile', open); }, [user]);
+  if (!kind) return null;
+  const save = async () => { try { if (!name.trim()) throw new Error('名称不能为空'); if (kind === 'user') { const next = await api.updateProfile(name.trim(), avatar.trim() || null); setUser(next); localStorage.setItem('wisadel.user', JSON.stringify(next)); } else localStorage.setItem('wisadel.assistantProfile', JSON.stringify({ name: name.trim(), avatarUrl: avatar.trim() })); setKind(null); } catch (cause) { setError(cause instanceof Error ? cause.message : '保存失败'); } };
+    return <div className="modal-backdrop" onMouseDown={() => setKind(null)}><section className="settings-dialog profile-dialog" onMouseDown={(event) => event.stopPropagation()}><header><div><span>PROFILE</span><h2>{kind === 'user' ? '编辑用户资料' : '编辑 AI 资料'}</h2></div><button className="icon-button" onClick={() => setKind(null)}><X size={19} /></button></header><div className="settings-panel"><label className="setting-field">名称<input value={name} maxLength={50} onChange={(event) => setName(event.target.value)} /></label><label className="setting-field">头像 URL<input value={avatar} placeholder="https://... 或 data:image/..." onChange={(event) => setAvatar(event.target.value)} /></label>{error && <div className="setting-note">{error}</div>}<button className="text-command" onClick={() => void save()}>保存资料</button></div></section></div>;
+}
+
 function SettingsDialog() {
   const open = useAppStore((state) => state.settingsOpen);
   const close = useAppStore((state) => state.setSettingsOpen);
@@ -2208,6 +2223,7 @@ function SettingsDialog() {
   );
   const [persona, setPersona] = useState('serious');
   const [personaInstructions, setPersonaInstructions] = useState('保持严谨、克制、专业的语气。');
+  const [customEditor, setCustomEditor] = useState<'work' | 'persona' | null>(null);
   const [agentStatus, setAgentStatus] = useState('');
   const [providerName, setProviderName] = useState('');
   const [providerUrl, setProviderUrl] = useState('');
@@ -2398,22 +2414,20 @@ function SettingsDialog() {
                     value={workStyle}
                     onChange={(event) => {
                       const next = event.target.value;
-                      setWorkStyle(next);
+                      setWorkStyle(next); if (next === 'custom') setCustomEditor('work');
                       if (next !== 'custom') setWorkInstructions(agentPresets[next]!.instructions);
                     }}
                   >
                     {Object.entries(agentPresets).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}
                   </select>
                 </label>
-                <label className="setting-field">
-                  工作方式指令
-                  <textarea className="agent-instructions" value={workInstructions} maxLength={8000} onChange={(event) => { setWorkStyle('custom'); setWorkInstructions(event.target.value); }} placeholder="描述希望 Agent 如何计划、实现、验证和回复。" />
-                </label>
-                <label className="setting-field">沟通人格<select value={persona} onChange={(event) => { const next = event.target.value; setPersona(next); if (next !== 'custom') setPersonaInstructions(personaPresets[next]!.instructions); }}>{Object.entries(personaPresets).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select></label>
-                <label className="setting-field">人格指令<textarea className="agent-instructions" value={personaInstructions} maxLength={4000} onChange={(event) => { setPersona('custom'); setPersonaInstructions(event.target.value); }} placeholder="描述 Agent 的表达语气与互动风格。" /></label>
+                <button className="text-command" onClick={() => setCustomEditor('work')}>编辑工作方式指令</button>
+                <label className="setting-field">沟通人格<select value={persona} onChange={(event) => { const next = event.target.value; setPersona(next); if (next === 'custom') setCustomEditor('persona'); else setPersonaInstructions(personaPresets[next]!.instructions); }}>{Object.entries(personaPresets).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select></label>
+                <button className="text-command" onClick={() => setCustomEditor('persona')}>编辑人格指令</button>
                 <button className="text-command" onClick={() => void saveAgentProfile()}>保存 Agent 配置</button>
                 {agentStatus && <div className="setting-note">{agentStatus}</div>}
                 <div className="setting-note">此配置仅作用于当前已信任工作区，并统一传给所有模型。安全规则、敏感文件限制和本地操作确认始终固定。</div>
+                {customEditor && <div className="modal-backdrop"><section className="settings-dialog profile-dialog"><header><div><span>CUSTOM</span><h2>{customEditor === 'work' ? '自定义工作方式' : '自定义沟通人格'}</h2></div><button className="icon-button" onClick={() => setCustomEditor(null)}><X size={19} /></button></header><div className="settings-panel"><textarea className="agent-instructions" autoFocus value={customEditor === 'work' ? workInstructions : personaInstructions} maxLength={customEditor === 'work' ? 8000 : 4000} onChange={(event) => customEditor === 'work' ? setWorkInstructions(event.target.value) : setPersonaInstructions(event.target.value)} /> <button className="text-command" onClick={() => { if (customEditor === 'work') setWorkStyle('custom'); else setPersona('custom'); setCustomEditor(null); }}>保存自定义内容</button></div></section></div>}
               </>
             )}
             {tab === 'appearance' && (

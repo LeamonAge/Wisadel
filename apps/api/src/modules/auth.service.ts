@@ -52,6 +52,10 @@ export class AuthService {
     return { revoked: true };
   }
 
+  async updateProfile(userId: string, input: { nickname: string; avatarUrl: string | null }) {
+    return this.store.updateUserProfile(userId, input);
+  }
+
   private async issueTokens(user: User): Promise<AuthResponse> {
     const payload = { sub: user.id, email: user.email, role: user.role };
     const refreshToken = this.jwt.sign({ ...payload, type: 'refresh', jti: randomUUID() }, { secret: this.refreshSecret, expiresIn: '30d' });

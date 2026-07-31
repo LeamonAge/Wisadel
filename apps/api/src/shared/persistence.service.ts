@@ -27,6 +27,15 @@ export class PersistenceService {
     return user ? this.userWithPassword(user) : null;
   }
 
+  async updateUserProfile(id: string, input: { nickname: string; avatarUrl: string | null }): Promise<User> {
+    if (!this.integrated) {
+      const user = this.memory.users.get(id); if (!user) throw new Error('user not found');
+      user.nickname = input.nickname; user.avatarUrl = input.avatarUrl; return this.publicUser(user);
+    }
+    const user = await this.prisma.user.update({ where: { id }, data: input });
+    return this.publicUser(user);
+  }
+
   async createUser(input: { email: string; passwordHash: string; nickname: string; role: 'user' | 'admin' }): Promise<User> {
     if (!this.integrated) {
       const now = new Date().toISOString();

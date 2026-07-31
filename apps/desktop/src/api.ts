@@ -42,6 +42,7 @@ export class ApiClient {
     this.request<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, nickname }) });
   login = (email: string, password: string) =>
     this.request<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+  updateProfile = (nickname: string, avatarUrl: string | null) => this.request<AuthResponse['user']>('/auth/profile', { method: 'PATCH', body: JSON.stringify({ nickname, avatarUrl }) });
   logout = async () => {
     if (this.refreshToken) await this.request('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: this.refreshToken }) }).catch(() => undefined);
     this.setTokens(null, null);

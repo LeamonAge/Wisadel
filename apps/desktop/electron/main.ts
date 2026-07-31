@@ -9,6 +9,7 @@ let imageStudioWindow: BrowserWindow | null = null;
 let lastUpdateEvent: object | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const alwaysApproved = new Set<string>();
 const LOCAL_IGNORE = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.env']);
 const LOCAL_TEXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.rs', '.java', '.cs', '.json', '.md', '.css', '.html', '.yml', '.yaml', '.toml']);
@@ -170,7 +171,9 @@ const openImageStudio = () => {
   else void imageStudioWindow.loadFile(path.join(__dirname, '../dist/index.html'), { query: { workspace: 'image' } });
 };
 
-app.whenReady().then(() => {
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else app.whenReady().then(() => {
   ipcMain.handle('wisadel:window-control', (event, action: 'minimize' | 'maximize' | 'close') => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return false;
@@ -245,6 +248,8 @@ app.whenReady().then(() => {
   configureAutoUpdate();
   app.on('activate', showWindow);
 });
+
+app.on('second-instance', showWindow);
 
 app.on('window-all-closed', () => {
   // The application remains available from the system tray.
