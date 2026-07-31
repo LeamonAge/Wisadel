@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import type { Message } from '@wisadel/contracts';
 import { AgentToolsService } from './agent-tools.service';
 import { buildAgentSystemPrompt } from './agent-prompt';
+import { LocalAgentActionService } from '../modules/local-agent-action.service';
 
 type ProviderMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -16,11 +17,11 @@ export type SettledModelUsage = { model: string; inputTokens: number; outputToke
 
 @Injectable()
 export class DeepSeekService {
-  constructor(private readonly tools: AgentToolsService) {}
+  constructor(private readonly tools: AgentToolsService, private readonly localActions: LocalAgentActionService) {}
 
   get configured() { return Boolean(process.env.DEEPSEEK_API_KEY); }
 
-  async *stream(messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void): AsyncGenerator<string> {
+  async *stream(messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }): AsyncGenerator<string> {
     if ((process.env.AI_MODE ?? 'mock') === 'mock' || !this.configured) {
       const text = `这是 Wisadel 的本地模拟回复。我已经收到：${latest}。配置 DeepSeek 环境变量后，这里会切换为真实 Agent。`;
       for (const chunk of text.match(/.{1,8}/gu) ?? [text]) { yield chunk; await new Promise((resolve) => setTimeout(resolve, 20)); }
@@ -68,7 +69,7 @@ export class DeepSeekService {
           }
           let result: string;
           try {
-            result = await this.tools.execute(call.function);
+            result = await this.executeTool(call.function, localContext);
           } catch (error) {
             result = `工具执行失败：${error instanceof Error ? error.message : '未知错误'}`;
           }
@@ -91,6 +92,14 @@ export class DeepSeekService {
       if (error instanceof ServiceUnavailableException) throw error;
       throw new ServiceUnavailableException(error instanceof Error ? `DeepSeek Agent 暂时不可用：${error.message}` : 'DeepSeek Agent 暂时不可用');
     }
+  }
+
+  private executeTool(call: { name: string; arguments: string }, localContext?: { userId: string; workspaceId: string }) {
+    if (localContext && ['read_file', 'write_file', 'run_command'].includes(call.name)) {
+      let input: Record<string, unknown>; try { input = JSON.parse(call.arguments || '{}'); } catch { throw new ServiceUnavailableException('本机工具参数不是有效 JSON'); }
+      return this.localActions.request(localContext.userId, localContext.workspaceId, call.name, input);
+    }
+    return this.tools.execute(call);
   }
 
   private toolLabel(name: string, rawArguments: string) {

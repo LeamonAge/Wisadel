@@ -51,7 +51,7 @@ export class ProviderRouterService {
   defaultModel() { return 'deepseek-ai/DeepSeek-V4-Flash'; }
   async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }): AsyncGenerator<string> {
     const entry = CATALOGUE.find((item) => item.id === model) ?? CATALOGUE[0];
-    if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage); return; }
+    if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage, localContext); return; }
     const key = this.keyFor(entry); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
     if (!key) throw new ServiceUnavailableException(`${entry.provider} API 未配置`);
     const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...messages.slice(-18).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
