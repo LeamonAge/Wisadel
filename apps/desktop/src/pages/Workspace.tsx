@@ -2202,10 +2202,12 @@ function SettingsDialog() {
   const providers = useAppStore((state) => state.providers);
   const setProviders = useAppStore((state) => state.setProviders);
   const [tab, setTab] = useState<'general' | 'agent' | 'appearance' | 'advanced'>('general');
-  const [agentProfile, setAgentProfile] = useState('codex');
-  const [agentInstructions, setAgentInstructions] = useState(
+  const [workStyle, setWorkStyle] = useState('codex');
+  const [workInstructions, setWorkInstructions] = useState(
     '先理解现有代码和任务目标，再进行范围明确的实现。优先复用现有模式；修改后运行相关检查，并简洁说明实际完成内容与验证结果。'
   );
+  const [persona, setPersona] = useState('serious');
+  const [personaInstructions, setPersonaInstructions] = useState('保持严谨、克制、专业的语气。');
   const [agentStatus, setAgentStatus] = useState('');
   const [providerName, setProviderName] = useState('');
   const [providerUrl, setProviderUrl] = useState('');
@@ -2234,6 +2236,9 @@ function SettingsDialog() {
     },
     custom: { label: '自定义', instructions: '' }
   };
+  const personaPresets: Record<string, { label: string; instructions: string }> = {
+    serious: { label: '严肃认真', instructions: '保持严谨、克制、专业的语气。先核对事实和约束，再给出有依据的结论。' }, cheerful: { label: '开朗乐观', instructions: '保持明快、友善、积极的语气。清楚说明进展与风险。' }, stern: { label: '冷酷严峻', instructions: '保持冷静、直接、简练的语气。优先陈述事实、约束和决策。' }, refined: { label: '随和儒雅', instructions: '保持温和、从容、有分寸的语气。清晰解释判断与取舍。' }, scoundrel: { label: '斯文败类', instructions: '采用文雅、克制而略带危险感的表达风格，但始终尊重用户，不操纵或贬低他人。' }, contrast: { label: '反差', instructions: '表面表达克制，关键处呈现细致关照与敏锐观察。' }, villain: { label: '恶役', instructions: '采用戏剧化、掌控感较强但尊重用户的表达风格。结果必须准确可验证。' }, tsundere: { label: '傲娇', instructions: '使用轻微嘴硬、克制关心的语气，不攻击或羞辱用户。' }, fiery: { label: '易怒', instructions: '表达可以急切但不辱骂或威胁，聚焦问题和解决办法。' }, motherly: { label: '妈妈型', instructions: '保持耐心、照顾周全、善于提醒风险的语气。' }, sister: { label: '妹妹型', instructions: '使用活泼、亲近、礼貌且有边界感的语气。' }, brother: { label: '哥哥型', instructions: '使用稳重、支持、可靠的语气。' }, uncle: { label: '油腻大叔', instructions: '使用略带夸张但不冒犯的成年人口吻，避免性暗示和骚扰。' }, officer: { label: '军官', instructions: '使用纪律严明、目标清晰的指挥风格，尊重用户决定。' }, brat: { label: '雌小鬼', instructions: '使用俏皮、轻微挑衅但不冒犯的语气；不羞辱、性化或贬低用户。' }, custom: { label: '自定义人格', instructions: '' }
+  };
   useEffect(() => {
     const workspaceId = localStorage.getItem('wisadel.workspaceId');
     if (!workspaceId || !open) return;
@@ -2241,10 +2246,10 @@ function SettingsDialog() {
       .workspaces()
       .then((items) => {
         const saved = items.find((item) => item.id === workspaceId)?.settings.agentProfile as
-          { preset?: string; instructions?: string } | undefined;
+          { workStyle?: string; workInstructions?: string; persona?: string; personaInstructions?: string; preset?: string; instructions?: string } | undefined;
         if (saved) {
-          setAgentProfile(saved.preset ?? 'custom');
-          setAgentInstructions(saved.instructions ?? '');
+          setWorkStyle(saved.workStyle ?? saved.preset ?? 'codex'); setWorkInstructions(saved.workInstructions ?? saved.instructions ?? '');
+          setPersona(saved.persona ?? 'serious'); setPersonaInstructions(saved.personaInstructions ?? '保持严谨、克制、专业的语气。');
         }
       })
       .catch(() => undefined);
@@ -2258,8 +2263,8 @@ function SettingsDialog() {
     try {
       await api.updateWorkspaceSettings(workspaceId, {
         agentProfile: {
-          preset: agentProfile,
-          instructions: agentInstructions.trim().slice(0, 12000)
+          workStyle, workInstructions: workInstructions.trim().slice(0, 8000), persona, personaInstructions: personaInstructions.trim().slice(0, 4000),
+          instructions: `工作方式：${workInstructions.trim()}\n\n沟通人格：${personaInstructions.trim()}`.slice(0, 12000)
         }
       });
       setAgentStatus('已保存。后续对话会对所有模型生效。');
@@ -2386,24 +2391,26 @@ function SettingsDialog() {
             )}
             {tab === 'agent' && (
               <>
-                <h3>Agent 工作方式</h3>
+                <h3>Agent 配置</h3>
                 <label className="setting-field">
                   配置
                   <select
-                    value={agentProfile}
+                    value={workStyle}
                     onChange={(event) => {
                       const next = event.target.value;
-                      setAgentProfile(next);
-                      if (next !== 'custom') setAgentInstructions(agentPresets[next]!.instructions);
+                      setWorkStyle(next);
+                      if (next !== 'custom') setWorkInstructions(agentPresets[next]!.instructions);
                     }}
                   >
                     {Object.entries(agentPresets).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}
                   </select>
                 </label>
                 <label className="setting-field">
-                  工作指令
-                  <textarea className="agent-instructions" value={agentInstructions} maxLength={12000} onChange={(event) => { setAgentProfile('custom'); setAgentInstructions(event.target.value); }} placeholder="描述希望 Agent 如何计划、实现、验证和回复。" />
+                  工作方式指令
+                  <textarea className="agent-instructions" value={workInstructions} maxLength={8000} onChange={(event) => { setWorkStyle('custom'); setWorkInstructions(event.target.value); }} placeholder="描述希望 Agent 如何计划、实现、验证和回复。" />
                 </label>
+                <label className="setting-field">沟通人格<select value={persona} onChange={(event) => { const next = event.target.value; setPersona(next); if (next !== 'custom') setPersonaInstructions(personaPresets[next]!.instructions); }}>{Object.entries(personaPresets).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select></label>
+                <label className="setting-field">人格指令<textarea className="agent-instructions" value={personaInstructions} maxLength={4000} onChange={(event) => { setPersona('custom'); setPersonaInstructions(event.target.value); }} placeholder="描述 Agent 的表达语气与互动风格。" /></label>
                 <button className="text-command" onClick={() => void saveAgentProfile()}>保存 Agent 配置</button>
                 {agentStatus && <div className="setting-note">{agentStatus}</div>}
                 <div className="setting-note">此配置仅作用于当前已信任工作区，并统一传给所有模型。安全规则、敏感文件限制和本地操作确认始终固定。</div>
