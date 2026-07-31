@@ -5,8 +5,9 @@ import { PersistenceService } from './persistence.service';
 import { StableDiffusionService } from '../providers/stable-diffusion.service';
 import { randomUUID } from 'node:crypto';
 import { QwenService } from '../providers/qwen.service';
-import { DeepSeekService, type SettledModelUsage } from '../providers/deepseek.service';
+import type { SettledModelUsage } from '../providers/deepseek.service';
 import { BillingService } from '../modules/billing.service';
+import { ProviderRouterService } from '../providers/provider-router.service';
 
 @Injectable()
 export class QueueService implements OnModuleInit, OnModuleDestroy {
@@ -21,7 +22,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     private readonly persistence: PersistenceService,
     private readonly sd: StableDiffusionService,
     private readonly qwen: QwenService,
-    private readonly deepseek: DeepSeekService,
+    private readonly router: ProviderRouterService,
     private readonly billing: BillingService
   ) {}
 
@@ -125,11 +126,13 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     await this.persistence.updateAgentStep(taskId, 0, { status: 'running', detail: '正在恢复任务上下文并制定执行计划' });
     try {
       const history = await this.persistence.listMessages(task.userId, task.sessionId);
+      const session = await this.persistence.findSession(task.userId, task.sessionId);
+      if (!session) throw new Error('关联对话不存在');
       await this.persistence.updateAgentStep(taskId, 0, { status: 'succeeded', detail: '已保存三步执行计划，后台任务可以在关闭窗口后继续。' });
       await this.persistence.updateAgentStep(taskId, 1, { status: 'running', detail: '正在调用 Agent 与已授权工具' });
       let answer = '';
       const usage: SettledModelUsage[] = [];
-      for await (const chunk of this.deepseek.stream(history.slice(0, -1), task.content, (label) => void this.persistence.updateAgentStep(taskId, 1, { detail: label }), (item) => usage.push(item))) answer += chunk;
+      for await (const chunk of this.router.stream(session.model, history.slice(0, -1), task.content, (label) => void this.persistence.updateAgentStep(taskId, 1, { detail: label }), (item) => usage.push(item))) answer += chunk;
       await this.persistence.updateAgentStep(taskId, 1, { status: 'succeeded', detail: 'Agent 执行完成。' });
       await this.persistence.updateAgentStep(taskId, 2, { status: 'running', detail: '正在写入结果与结算用量' });
       await this.persistence.addMessage({ sessionId: task.sessionId, clientId: `agent-task-${randomUUID()}`, role: 'assistant', content: answer });

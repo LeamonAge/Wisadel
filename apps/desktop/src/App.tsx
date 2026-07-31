@@ -106,12 +106,12 @@ async function applyBackgroundPalette(source: string | null, theme: 'dark' | 'li
     }
     const color = count ? [Math.round(red / count), Math.round(green / count), Math.round(blue / count)] : theme === 'light' ? [255, 255, 255] : [18, 16, 16];
     const luminance = ((color[0] ?? 0) * 0.2126 + (color[1] ?? 0) * 0.7152 + (color[2] ?? 0) * 0.0722) / 255;
-    const ink = luminance > .58 ? '#211c1b' : '#f8f5f4';
+    const ink = '#211c1b';
     root.dataset.customBackground = 'true';
     root.style.setProperty('--background-rgb', color.join(' '));
     root.style.setProperty('--background-accent-rgb', accent.join(' '));
     root.style.setProperty('--background-ink', ink);
-    root.style.setProperty('--background-muted', luminance > .58 ? '#625b58' : '#d0c8c5');
+    root.style.setProperty('--background-muted', '#625b58');
     window.wisadelDesktop?.setTheme(luminance > .58 ? 'light' : 'dark', `#${color.map((value) => value.toString(16).padStart(2, '0')).join('')}`);
   } catch {
     root.dataset.customBackground = 'false';
