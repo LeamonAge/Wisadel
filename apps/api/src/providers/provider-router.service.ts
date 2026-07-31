@@ -4,6 +4,7 @@ import { DeepSeekService, type SettledModelUsage } from './deepseek.service';
 import { AgentToolsService } from './agent-tools.service';
 import { buildAgentSystemPrompt } from './agent-prompt';
 import { LocalAgentActionService } from '../modules/local-agent-action.service';
+import { compactContext } from './context-compactor';
 
 export type PublicModel = { id: string; provider: string; family: string; name: string; modality: 'text' };
 
@@ -54,9 +55,10 @@ export class ProviderRouterService {
     if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage, localContext, profileInstructions, signal); return; }
     const key = this.keyFor(entry); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
     if (!key) throw new ServiceUnavailableException(`${entry.provider} API 未配置`);
-    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...(profileInstructions ? [{ role: 'system', content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []), ...messages.slice(-18).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
+    const compacted = compactContext(messages);
+    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...(profileInstructions ? [{ role: 'system', content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []), ...(compacted.summary ? [{ role: 'system', content: `SUMMARY AGENT CONTEXT COMPRESSION:\n${compacted.summary}` }] : []), ...compacted.messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
     let text = '';
-    for (let turn = 0; turn < 10; turn += 1) {
+    for (;;) {
       if (signal?.aborted) return;
       const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', signal, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: false, messages: conversation, tools: this.tools.definitions, tool_choice: 'auto', temperature: 0.2 }) });
       const body = await response.json().catch(() => ({})) as any;

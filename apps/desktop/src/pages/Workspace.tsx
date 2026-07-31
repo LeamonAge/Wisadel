@@ -70,6 +70,19 @@ function renderMessageContent(content: string) {
     : part.split('\n').map((line, lineIndex) => <span key={`${index}-${lineIndex}`}>{line}{lineIndex < part.split('\n').length - 1 && <br />}</span>));
 }
 
+function AgentTimeline({ steps, completedAt, active = false }: { steps: string[]; completedAt?: string; active?: boolean }) {
+  const category = (step: string) => {
+    const value = step.toLowerCase();
+    if (/write|replace|修改|写入/.test(value)) return 'file-change';
+    if (/read|读取/.test(value)) return 'file-read';
+    if (/search|检索|网页|browser/.test(value)) return 'research';
+    if (/run|命令|脚本/.test(value)) return 'command';
+    if (/summary|压缩|整理/.test(value)) return 'summary';
+    return 'plan';
+  };
+  return <div className="agent-timeline">{steps.map((step, index) => <div className={`agent-timeline-step ${category(step)}`} key={`${step}-${index}`}><i>{index + 1}</i><div><strong>{step}</strong>{index === steps.length - 1 && <span>{active ? '进行中' : completedAt ? `完成于 ${new Date(completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '已完成'}</span>}</div></div>)}</div>;
+}
+
 export function Workspace({
   onLogout,
   standaloneImage = false
@@ -869,6 +882,7 @@ function Conversation({
   const loadingConversation = useAppStore((state) => state.loadingConversation);
   const streaming = useAppStore((state) => state.streamingText);
   const sending = useAppStore((state) => state.sending);
+  const reconnecting = useAppStore((state) => state.reconnecting);
   const sendError = useAppStore((state) => state.sendError);
   const currentUser = useAppStore((state) => state.user)!;
   const [assistantProfile, setAssistantProfile] = useState(() => JSON.parse(localStorage.getItem('wisadel.assistantProfile') ?? '{"name":"Wisadel","avatarUrl":""}') as { name: string; avatarUrl: string });
@@ -886,7 +900,6 @@ function Conversation({
   const removePending = useAppStore((state) => state.removePendingImage);
   const attachImage = useAppStore((state) => state.attachImage);
   const previewImage = useAppStore((state) => state.setPreviewImage);
-  const latestAssistantId = [...messages].reverse().find((message) => message.role === 'assistant')?.id;
   const reloadSession = useAppStore((state) => state.selectSession);
   const [input, setInput] = useState('');
   const [capturing, setCapturing] = useState(false);
@@ -1020,7 +1033,8 @@ function Conversation({
           )}
           <div>
             <span>{page === 'chat' ? 'AI 对话' : '图像生成'}</span>
-            <h2>{active?.title ?? (loadingConversation ? '正在载入' : '新对话')}</h2>
+          <h2>{active?.title ?? (loadingConversation ? '正在载入' : '新对话')}</h2>
+          {reconnecting && <small className="connection-state">正在重连 Agent…</small>}
           </div>
         </div>
         {page === 'chat' ? (
@@ -1106,13 +1120,13 @@ function Conversation({
                   <button title="重新生成" onClick={() => void send('请基于本轮用户需求重新生成上一条回复。')}><RotateCcw size={14} /></button>
                 </div>
               )}
-              {message.role === 'assistant' && message.id === latestAssistantId && !sending && !!(message.trace?.length || reasoningSteps.length) && (
+              {message.role === 'assistant' && !!message.trace?.length && (
                 <details className="reasoning-panel" open={!reasoningCollapsed}>
                   <summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}>
                     <Sparkles size={14} />
                     执行过程
                   </summary>
-                  <div>{(message.trace?.length ? message.trace : reasoningSteps).map((step, index) => <p key={`${step}-${index}`}><i>{index + 1}</i>{step}</p>)}</div>
+                  <AgentTimeline steps={message.trace} completedAt={message.createdAt} />
                 </details>
               )}
               {!!message.imageUrls.length && (
@@ -1169,7 +1183,7 @@ function Conversation({
                     <Sparkles size={14} />
                     正在思考与执行
                   </summary>
-                  <div>{reasoningSteps.map((step, index) => <p key={`${step}-${index}`}><i>{index + 1}</i>{step}</p>)}</div>
+                  <AgentTimeline steps={reasoningSteps} active />
                 </details>
               )}
             </div>

@@ -3,6 +3,7 @@ import type { Message } from '@wisadel/contracts';
 import { AgentToolsService } from './agent-tools.service';
 import { buildAgentSystemPrompt } from './agent-prompt';
 import { LocalAgentActionService } from '../modules/local-agent-action.service';
+import { compactContext } from './context-compactor';
 
 type ProviderMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -28,6 +29,7 @@ export class DeepSeekService {
       return;
     }
 
+    const compacted = compactContext(messages);
     const conversation: ProviderMessage[] = [
       {
         role: 'system',
@@ -38,7 +40,8 @@ export class DeepSeekService {
 文件工具仅限授权工作区。不得尝试读取环境变量、.env、凭据、密钥或绕过路径限制。不要覆盖与任务无关的内容。网页工具用于读取用户提供或任务需要的公开网页，不得探测本机、局域网或云元数据地址。使用自信、冷静、简洁且准确的中文回答。`
       },
       ...(profileInstructions ? [{ role: 'system' as const, content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []),
-      ...messages.slice(-18).map((message): ProviderMessage => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
+      ...(compacted.summary ? [{ role: 'system' as const, content: `SUMMARY AGENT CONTEXT COMPRESSION:\n${compacted.summary}` }] : []),
+      ...compacted.messages.map((message): ProviderMessage => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
       { role: 'user', content: latest }
     ];
 
@@ -47,7 +50,7 @@ export class DeepSeekService {
       let finalText = '';
       const callCounts = new Map<string, number>();
       let stopReason = '';
-      for (let turn = 0; turn < 10; turn += 1) {
+      for (;;) {
         if (signal?.aborted) return;
         const reply = await this.complete(conversation, true, process.env.DEEPSEEK_MODEL ?? 'deepseek-chat', signal);
         for (const usage of reply.usages) onUsage?.({ model: reply.model, inputTokens: usage.prompt_tokens ?? 0, outputTokens: usage.completion_tokens ?? 0 });

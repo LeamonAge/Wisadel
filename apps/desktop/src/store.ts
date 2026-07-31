@@ -49,6 +49,7 @@ interface AppState {
   providers: ProviderConfig[];
   page: Page;
   online: boolean;
+  reconnecting: boolean;
   sessions: Session[];
   activeSessionId: string | null;
   messages: Message[];
@@ -127,6 +128,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   providers: JSON.parse(localStorage.getItem('wisadel.providers') ?? '[]') as ProviderConfig[],
   page: 'chat',
   online: navigator.onLine,
+  reconnecting: false,
   sessions: [],
   activeSessionId: null,
   messages: [],
@@ -288,7 +290,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       trace: [],
       createdAt: new Date().toISOString()
     };
-    set((state) => ({ messages: [...state.messages, optimistic], sending: true, streamingText: '', reasoningSteps: ['正在准备请求'], reasoningCollapsed: false, sendError: null, pendingImageUrls: [], pendingAttachments: [] }));
+    set((state) => ({ messages: [...state.messages, optimistic], sending: true, reconnecting: false, streamingText: '', reasoningSteps: ['正在准备请求'], reasoningCollapsed: false, sendError: null, pendingImageUrls: [], pendingAttachments: [] }));
     try {
       const assistant = await api.streamMessage(
         sessionId,
@@ -321,10 +323,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           updatedAt: assistant.createdAt
         } : session),
         streamingText: '',
-        reasoningCollapsed: true,
+        reasoningCollapsed: false,
         sending: false,
         sendError: null,
-        online: true
+        online: true,
+        reconnecting: false
       }));
     } catch (error) {
       inFlightSessions.delete(sessionId);
@@ -333,17 +336,34 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((state) => ({
         messages: state.messages.map((message) => message.id === optimistic.id ? { ...message, status: error instanceof DOMException && error.name === 'AbortError' ? 'sent' as const : 'failed' as const } : message),
         sending: false,
+        reconnecting: true,
         streamingText: '',
         reasoningCollapsed: true,
-        sendError: error instanceof DOMException && error.name === 'AbortError' ? null : error instanceof Error ? error.message : '消息发送失败',
+        sendError: error instanceof DOMException && error.name === 'AbortError' ? null : '连接中断，正在恢复当前 Agent 任务…',
         pendingImageUrls: imageUrls,
         pendingAttachments: attachments
       }));
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        void (async () => {
+          for (let attempt = 0; attempt < 8; attempt += 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1200));
+            try {
+              const recovered = await api.messages(sessionId);
+              const assistant = [...recovered].reverse().find((message) => message.role === 'assistant' && message.createdAt > optimistic.createdAt);
+              if (assistant && isCurrent()) {
+                set({ messages: recovered, online: true, reconnecting: false, sendError: null, reasoningCollapsed: false });
+                return;
+              }
+            } catch { /* keep retrying while the API reconnects */ }
+          }
+          if (isCurrent()) set({ reconnecting: false, online: false, sendError: error instanceof Error ? error.message : '连接恢复失败，请重试' });
+        })();
+      }
     }
   },
   cancelMessage: () => {
     api.cancelStream();
-    set((state) => ({ sending: false, reasoningSteps: [...state.reasoningSteps, '已停止本轮生成'], reasoningCollapsed: false }));
+    set((state) => ({ sending: false, reconnecting: false, reasoningSteps: [...state.reasoningSteps, '已停止本轮生成'], reasoningCollapsed: false }));
   },
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPreviewImage: (previewImageUrl) => set({ previewImageUrl }),

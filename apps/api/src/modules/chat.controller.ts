@@ -135,6 +135,7 @@ export class ChatController {
       const workspace = workspaceId ? (await this.workspaces.list(user.sub)).find((item) => item.id === workspaceId && item.trust === 'TRUSTED') : undefined;
       const settings = workspace?.settings;
       const profile = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings.agentProfile as { instructions?: string } | undefined : undefined;
+      if (history.length > 18) sendReasoning(`Summary Agent 正在压缩 ${history.length - 18} 条历史消息`);
       for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, profile?.instructions, abortController.signal)) {
         answer += chunk;
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
