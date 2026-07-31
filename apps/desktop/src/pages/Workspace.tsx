@@ -80,8 +80,42 @@ export function Workspace({ onLogout, standaloneImage = false }: { onLogout: () 
       </div>
       <SettingsDialog />
       <ImageViewer />
+      {!standaloneImage && <LocalAgentRunner />}
     </main>
   );
+}
+
+function LocalAgentRunner() {
+  useEffect(() => {
+    let running = false;
+    const poll = async () => {
+      if (running) return;
+      const workspaceId = localStorage.getItem('wisadel.workspaceId');
+      if (!workspaceId) return;
+      try {
+        const workspaces = await api.workspaces(); const workspace = workspaces.find((item) => item.id === workspaceId && item.trust === 'TRUSTED');
+        if (!workspace) return;
+        const actions = await api.localAgentActions(workspace.id);
+        for (const action of actions) {
+          running = true;
+          try {
+            const input = action.input;
+            const result = action.tool === 'read_file'
+              ? await window.wisadelDesktop?.agentReadFile(workspace.path, String(input.path ?? ''))
+              : action.tool === 'write_file'
+                ? await window.wisadelDesktop?.agentWriteFile(workspace.path, String(input.path ?? ''), String(input.content ?? ''))
+                : action.tool === 'run_command'
+                  ? await window.wisadelDesktop?.agentRunCommand(workspace.path, String(input.program ?? ''), Array.isArray(input.args) ? input.args.map(String) : [])
+                  : Promise.reject(new Error(`不支持的本机工具：${action.tool}`));
+            await api.completeLocalAgentAction(action.id, 'SUCCEEDED', result);
+          } catch (error) { await api.completeLocalAgentAction(action.id, 'FAILED', undefined, error instanceof Error ? error.message : '本机执行失败'); }
+          finally { running = false; }
+        }
+      } catch { running = false; }
+    };
+    void poll(); const timer = window.setInterval(() => void poll(), 900); return () => window.clearInterval(timer);
+  }, []);
+  return null;
 }
 
 function WorkspaceTrustMenu() {

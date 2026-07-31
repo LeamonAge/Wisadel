@@ -30,6 +30,7 @@ import { WorkspaceService } from './modules/workspace.service';
 import { ProjectContextController } from './modules/project-context.controller';
 import { ProjectContextService } from './modules/project-context.service';
 import { LocalAgentActionController } from './modules/local-agent-action.controller';
+import { LocalAgentActionService } from './modules/local-agent-action.service';
 
 @Module({
   imports: [
@@ -41,6 +42,6 @@ import { LocalAgentActionController } from './modules/local-agent-action.control
     })
   ],
   controllers: [AuthController, ChatController, ImageController, UploadController, HealthController, AdminController, BillingController, AgentTaskController, WorkspaceController, ProjectContextController, LocalAgentActionController],
-  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, BrowserAutomationService, AgentToolsService, DeepSeekService, ProviderRouterService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService, WorkspaceService, ProjectContextService]
+  providers: [MemoryStore, PrismaService, PersistenceService, ImageStorageService, StableDiffusionService, QueueService, BrowserAutomationService, AgentToolsService, DeepSeekService, ProviderRouterService, QwenService, AuthService, ChatService, ImageService, BillingService, AgentTaskService, WorkspaceService, ProjectContextService, LocalAgentActionService]
 })
 export class AppModule {}
