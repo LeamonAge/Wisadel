@@ -34,10 +34,14 @@ export class WritingMasterService {
     const messages: Message[] = [];
     if (input.history?.trim()) messages.push({ id: crypto.randomUUID(), clientId: 'writing-history', sessionId: crypto.randomUUID(), role: 'user', content: input.history.slice(-12000), status: 'sent', imageUrls: [], attachments: [], trace: [], createdAt: new Date().toISOString() });
     const localContext = input.userId && input.workspaceId ? { userId: input.userId, workspaceId: input.workspaceId } : undefined;
-    const draft = await this.collect(this.router.stream(MODEL, messages, input.prompt, undefined, undefined, localContext, profile));
+    const trace: string[] = [];
+    const recordProgress = (label: string) => {
+      if (label && trace.at(-1) !== label) trace.push(label);
+    };
+    const draft = await this.collect(this.router.stream(MODEL, messages, input.prompt, recordProgress, undefined, localContext, profile));
     const reviewPrompt = `审校以下写作结果是否完全遵循固定写作约束与体裁要求。不要解释审校过程；若合格，原样输出；若不合格，直接输出完整修订稿。\n\n待审校文本：\n${draft}`;
-    const content = await this.collect(this.router.stream(MODEL, [], reviewPrompt, undefined, undefined, localContext, `${this.basePrompt}\n\n你是写作审校器。只输出合规的最终正文或信息补充请求。`));
-    return { content, reviewed: true, model: MODEL };
+    const content = await this.collect(this.router.stream(MODEL, [], reviewPrompt, recordProgress, undefined, localContext, `${this.basePrompt}\n\n你是写作审校器。只输出合规的最终正文或信息补充请求。`));
+    return { content, reviewed: true, model: MODEL, trace };
   }
 
   private async collect(stream: AsyncGenerator<string>) { let text = ''; for await (const chunk of stream) text += chunk; return text; }
