@@ -162,7 +162,7 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('wisadel:choose-workspace', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
-    const options = { title: '选择本机工程目录', properties: ['openDirectory', 'createDirectory'] as const };
+    const options = { title: '选择本机工程目录', properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> };
     const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
