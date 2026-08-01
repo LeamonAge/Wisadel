@@ -39,6 +39,7 @@ export class DeepSeekService {
 
 文件工具仅限授权工作区。不得尝试读取环境变量、.env、凭据、密钥或绕过路径限制。不要覆盖与任务无关的内容。网页工具用于读取用户提供或任务需要的公开网页，不得探测本机、局域网或云元数据地址。使用自信、冷静、简洁且准确的中文回答。`
       },
+      ...(localContext ? [{ role: 'system' as const, content: '当前任务已关联用户在桌面端信任的本机工作区。文件读取、写入与命令工具会在该工作区的真实路径中执行；当工作区是磁盘根目录时，工作区内的绝对路径也可以使用。不要根据服务器工作目录拒绝用户工作区内的文件。' }] : []),
       ...(profileInstructions ? [{ role: 'system' as const, content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []),
       ...(compacted.summary ? [{ role: 'system' as const, content: `SUMMARY AGENT CONTEXT COMPRESSION:\n${compacted.summary}` }] : []),
       ...compacted.messages.map((message): ProviderMessage => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
@@ -101,7 +102,7 @@ export class DeepSeekService {
   }
 
   private executeTool(call: { name: string; arguments: string }, localContext?: { userId: string; workspaceId: string }) {
-    if (localContext && ['read_file', 'write_file', 'run_command'].includes(call.name)) {
+    if (localContext && ['list_files', 'search_files', 'read_file', 'write_file', 'run_command'].includes(call.name)) {
       let input: Record<string, unknown>; try { input = JSON.parse(call.arguments || '{}'); } catch { throw new ServiceUnavailableException('本机工具参数不是有效 JSON'); }
       return this.localActions.request(localContext.userId, localContext.workspaceId, call.name, input);
     }

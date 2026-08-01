@@ -20,7 +20,7 @@ export class AgentToolsService {
   readonly definitions = [
     this.tool('list_files', '列出工作区内的文件和目录。', {
       path: { type: 'string', description: '相对工作区的目录，默认为 .' },
-      depth: { type: 'integer', minimum: 1, maximum: 4, description: '递归深度，默认 2' }
+      depth: { type: 'integer', minimum: 1, maximum: 64, description: '递归深度，默认 2' }
     }),
     this.tool('search_files', '在工作区文本文件中搜索文本，适合定位组件、函数和样式。', {
       query: { type: 'string', description: '要搜索的精确文本（不支持正则）' },

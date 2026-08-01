@@ -18,6 +18,7 @@ const LOCAL_SECRET = /(^|[\\/])(\.env(?:\..*)?|\.npmrc|\.pypirc|id_rsa|id_ed2551
 const LOCAL_PROGRAMS = new Set(['node', 'node.exe', 'npm', 'npm.cmd', 'npx', 'npx.cmd', 'python', 'python.exe', 'pytest', 'git', 'git.exe', 'cargo', 'cargo.exe', 'go', 'go.exe']);
 
 const agentPath = (workspace: string, relativePath: string) => {
+  if (path.isAbsolute(relativePath)) relativePath = path.relative(path.resolve(workspace), path.resolve(relativePath));
   if (!relativePath || path.isAbsolute(relativePath)) throw new Error('必须使用工作区相对路径');
   const root = path.resolve(workspace); const target = path.resolve(root, relativePath); const rel = path.relative(root, target);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || LOCAL_SECRET.test(rel)) throw new Error('路径不在工作区内或属于敏感文件');
@@ -231,6 +232,49 @@ if (!hasSingleInstanceLock) {
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
   ipcMain.handle('wisadel:workspace-context', (_event, workspacePath: string) => localWorkspaceContext(workspacePath));
+  ipcMain.handle('wisadel:agent-list-files', async (_event, workspacePath: string, relativePath: string, depth: number) => {
+    const root = path.resolve(workspacePath);
+    const start = relativePath === '.' ? root : agentPath(workspacePath, relativePath);
+    const output: string[] = [];
+    const walk = async (directory: string, level: number): Promise<void> => {
+      if (output.length >= 1000 || level > Math.max(1, Math.min(64, depth))) return;
+      const entries = await fs.readdir(directory, { withFileTypes: true });
+      for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 300)) {
+        if (LOCAL_IGNORE.has(entry.name) || LOCAL_SECRET.test(entry.name)) continue;
+        const target = path.resolve(directory, entry.name);
+        const item = path.relative(root, target);
+        output.push(`${item}${entry.isDirectory() ? '/' : ''}`);
+        if (entry.isDirectory()) await walk(target, level + 1);
+        if (output.length >= 1000) return;
+      }
+    };
+    await walk(start, 1);
+    return output.join('\n') || '(空目录)';
+  });
+  ipcMain.handle('wisadel:agent-search-files', async (_event, workspacePath: string, query: string, relativePath: string) => {
+    if (!query || query.length > 500) throw new Error('搜索文本长度无效');
+    const root = path.resolve(workspacePath);
+    const start = relativePath === '.' ? root : agentPath(workspacePath, relativePath);
+    const matches: string[] = [];
+    const walk = async (directory: string): Promise<void> => {
+      if (matches.length >= 200) return;
+      const entries = await fs.readdir(directory, { withFileTypes: true });
+      for (const entry of entries) {
+        if (LOCAL_IGNORE.has(entry.name) || LOCAL_SECRET.test(entry.name)) continue;
+        const target = path.resolve(directory, entry.name);
+        if (entry.isDirectory()) await walk(target);
+        else if (LOCAL_TEXT.has(path.extname(target).toLowerCase())) {
+          const stat = await fs.stat(target);
+          if (stat.size > 512_000) continue;
+          const lines = (await fs.readFile(target, 'utf8')).split(/\r?\n/);
+          lines.forEach((line, index) => { if (line.includes(query) && matches.length < 200) matches.push(`${path.relative(root, target)}:${index + 1}: ${line.slice(0, 300)}`); });
+        }
+        if (matches.length >= 200) return;
+      }
+    };
+    await walk(start);
+    return matches.join('\n') || '未找到匹配项';
+  });
   ipcMain.handle('wisadel:agent-read-file', async (_event, workspacePath: string, relativePath: string) => {
     const target = agentPath(workspacePath, relativePath);
     if (!LOCAL_TEXT.has(path.extname(target).toLowerCase()) || (await fs.stat(target)).size > 512_000) throw new Error('仅可读取小于 512KB 的文本/代码文件');

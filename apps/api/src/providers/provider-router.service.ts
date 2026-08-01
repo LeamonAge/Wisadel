@@ -56,7 +56,7 @@ export class ProviderRouterService {
     const key = this.keyFor(entry); const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
     if (!key) throw new ServiceUnavailableException(`${entry.provider} API 未配置`);
     const compacted = compactContext(messages);
-    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...(profileInstructions ? [{ role: 'system', content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []), ...(compacted.summary ? [{ role: 'system', content: `SUMMARY AGENT CONTEXT COMPRESSION:\n${compacted.summary}` }] : []), ...compacted.messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
+    const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...(localContext ? [{ role: 'system', content: '当前任务已关联用户在桌面端信任的本机工作区。文件读取、写入与命令工具会在该工作区的真实路径中执行；当工作区是磁盘根目录时，工作区内的绝对路径也可以使用。不要根据服务器工作目录拒绝用户工作区内的文件。' }] : []), ...(profileInstructions ? [{ role: 'system', content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []), ...(compacted.summary ? [{ role: 'system', content: `SUMMARY AGENT CONTEXT COMPRESSION:\n${compacted.summary}` }] : []), ...compacted.messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
     let text = '';
     for (;;) {
       if (signal?.aborted) return;
@@ -81,7 +81,7 @@ export class ProviderRouterService {
     for (const chunk of text.match(/[\s\S]{1,16}/g) ?? [text]) yield chunk;
   }
   private executeTool(name: string, raw: string, localContext?: { userId: string; workspaceId: string }) {
-    if (localContext && ['read_file', 'write_file', 'run_command'].includes(name)) {
+    if (localContext && ['list_files', 'search_files', 'read_file', 'write_file', 'run_command'].includes(name)) {
       let input: Record<string, unknown>; try { input = JSON.parse(raw || '{}'); } catch { throw new ServiceUnavailableException('本机工具参数不是有效 JSON'); }
       return this.localActions.request(localContext.userId, localContext.workspaceId, name, input);
     }

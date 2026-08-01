@@ -83,6 +83,22 @@ function AgentTimeline({ steps, completedAt, active = false }: { steps: string[]
   return <div className="agent-timeline">{steps.map((step, index) => <div className={`agent-timeline-step ${category(step)}`} key={`${step}-${index}`}><i>{index + 1}</i><div><strong>{step}</strong>{index === steps.length - 1 && <span>{active ? '进行中' : completedAt ? `完成于 ${new Date(completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '已完成'}</span>}</div></div>)}</div>;
 }
 
+function LiveAgentThinking({ steps }: { steps: string[] }) {
+  const latest = steps.at(-1) ?? '正在分析请求并制定执行计划';
+  const [visible, setVisible] = useState('');
+  useEffect(() => {
+    setVisible('');
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index += 1;
+      setVisible(latest.slice(0, index));
+      if (index >= latest.length) window.clearInterval(timer);
+    }, 28);
+    return () => window.clearInterval(timer);
+  }, [latest]);
+  return <div className="live-thinking" aria-live="polite"><span className="thinking-orb" /><span>{visible || '正在思考'}</span></div>;
+}
+
 export function Workspace({
   onLogout,
   standaloneImage = false
@@ -273,7 +289,19 @@ function LocalAgentRunner() {
           try {
             const input = action.input;
             const result =
-              action.tool === 'read_file'
+              action.tool === 'list_files'
+                ? await window.wisadelDesktop?.agentListFiles(
+                    workspace.path,
+                    String(input.path ?? '.'),
+                    Number(input.depth ?? 2)
+                  )
+                : action.tool === 'search_files'
+                  ? await window.wisadelDesktop?.agentSearchFiles(
+                      workspace.path,
+                      String(input.query ?? ''),
+                      String(input.path ?? '.')
+                    )
+                : action.tool === 'read_file'
                 ? await window.wisadelDesktop?.agentReadFile(
                     workspace.path,
                     String(input.path ?? '')
@@ -1167,7 +1195,7 @@ function Conversation({
             </div>
           </div>
         ))}
-        {streaming && (
+        {(sending || streaming || reconnecting) && (
           <div className="message assistant">
             <div className="message-avatar">
               <Sparkles size={17} />
@@ -1176,13 +1204,14 @@ function Conversation({
               <div className="message-meta">
                 Wisadel<span>正在输入</span>
               </div>
-              <div className="message-content streaming">{renderMessageContent(streaming)}</div>
+              <div className="message-content streaming">{streaming ? renderMessageContent(streaming) : <span className="thinking-placeholder">正在准备回复</span>}</div>
               {!!reasoningSteps.length && (
                 <details className="reasoning-panel" open={!reasoningCollapsed}>
                   <summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}>
                     <Sparkles size={14} />
                     正在思考与执行
                   </summary>
+                  <LiveAgentThinking steps={reasoningSteps} />
                   <AgentTimeline steps={reasoningSteps} active />
                 </details>
               )}
