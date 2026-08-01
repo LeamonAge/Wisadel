@@ -24,26 +24,48 @@ const STYLES: Record<string, string> = {
 };
 
 @Injectable()
-export class WritingMasterService {
+export class WritingSkillService {
   private readonly basePrompt = this.loadBasePrompt();
   constructor(private readonly router: ProviderRouterService) {}
 
-  async write(input: { prompt: string; style: string; history?: string; userId?: string; workspaceId?: string }) {
-    const style = STYLES[input.style] ?? '通用叙事写作。';
+  matches(prompt: string) {
+    return /写作大师|写作技能|写小说|写一篇|续写|扩写|改写|润色|大纲|章节|世界观|人物小传|诗歌|散文|剧本|创作/.test(prompt);
+  }
+
+  async run(input: { prompt: string; history?: Message[]; userId?: string; workspaceId?: string; onProgress?: (label: string) => void; onUsage?: (usage: import('../providers/deepseek.service').SettledModelUsage) => void }) {
+    const style = STYLES[this.detectStyle(input.prompt)] ?? '通用叙事写作。';
     const profile = `${this.basePrompt}\n\n【写作大师模式】\n体裁要求：${style}\n你可以在已授权工作区读写文件、搜索公开网页及使用浏览器；确有必要时必须实际调用工具。先完成信息充分性评估，不足时只提出补充问题。`;
-    const messages: Message[] = [];
-    if (input.history?.trim()) messages.push({ id: crypto.randomUUID(), clientId: 'writing-history', sessionId: crypto.randomUUID(), role: 'user', content: input.history.slice(-12000), status: 'sent', imageUrls: [], attachments: [], trace: [], createdAt: new Date().toISOString() });
+    const messages = (input.history ?? []).slice(-18);
     const localContext = input.userId && input.workspaceId ? { userId: input.userId, workspaceId: input.workspaceId } : undefined;
     const trace: string[] = [];
     const recordProgress = (label: string) => {
       if (label && trace.at(-1) !== label) trace.push(label);
+      input.onProgress?.(label);
     };
-    const draft = await this.collect(this.router.stream(MODEL, messages, input.prompt, recordProgress, undefined, localContext, profile));
+    recordProgress('写作 Skill：使用 DeepSeek V4 Pro 生成初稿');
+    const draft = await this.collect(this.router.stream(MODEL, messages, input.prompt, recordProgress, input.onUsage, localContext, profile));
     const reviewPrompt = `审校以下写作结果是否完全遵循固定写作约束与体裁要求。不要解释审校过程；若合格，原样输出；若不合格，直接输出完整修订稿。\n\n待审校文本：\n${draft}`;
-    const content = await this.collect(this.router.stream(MODEL, [], reviewPrompt, recordProgress, undefined, localContext, `${this.basePrompt}\n\n你是写作审校器。只输出合规的最终正文或信息补充请求。`));
+    recordProgress('写作 Skill：正在审校初稿并生成最终版本');
+    const content = await this.collect(this.router.stream(MODEL, [], reviewPrompt, recordProgress, input.onUsage, localContext, `${this.basePrompt}\n\n你是写作审校器。只输出合规的最终正文或信息补充请求。`));
     return { content, reviewed: true, model: MODEL, trace };
   }
 
   private async collect(stream: AsyncGenerator<string>) { let text = ''; for await (const chunk of stream) text += chunk; return text; }
+  private detectStyle(prompt: string) {
+    if (/玄幻|修仙|宗门|秘境/.test(prompt)) return 'fantasy';
+    if (/西幻|魔法|精灵|骑士/.test(prompt)) return 'western_fantasy';
+    if (/武侠|江湖|门派/.test(prompt)) return 'wuxia';
+    if (/言情|恋爱|爱情/.test(prompt)) return 'romance';
+    if (/科幻|星际|赛博/.test(prompt)) return 'sci_fi';
+    if (/悬疑|推理|谜案/.test(prompt)) return 'mystery';
+    if (/惊悚|恐怖/.test(prompt)) return /恐怖/.test(prompt) ? 'horror' : 'thriller';
+    if (/历史|古代/.test(prompt)) return 'historical';
+    if (/军事|战争/.test(prompt)) return 'military';
+    if (/都市|现代/.test(prompt)) return 'urban';
+    if (/青春|校园/.test(prompt)) return 'youth';
+    if (/同人/.test(prompt)) return 'fanfiction';
+    if (/性化|情色/.test(prompt)) return 'erotic';
+    return 'fantasy';
+  }
   private loadBasePrompt() { try { return readFileSync(resolve(process.cwd(), 'src/providers/writing-master-prompt.md'), 'utf8'); } catch { throw new BadRequestException('写作大师底层提示词不可用'); } }
 }

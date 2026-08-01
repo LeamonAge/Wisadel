@@ -14,6 +14,7 @@ import { BillingService } from './billing.service';
 import type { SettledModelUsage } from '../providers/deepseek.service';
 import { ProviderRouterService } from '../providers/provider-router.service';
 import { WorkspaceService } from './workspace.service';
+import { WritingSkillService } from './writing-master.service';
 
 @Controller('chat')
 @UseGuards(AuthGuard)
@@ -27,7 +28,8 @@ export class ChatController {
     private readonly storage: ImageStorageService,
     private readonly billing: BillingService,
     private readonly router: ProviderRouterService,
-    private readonly workspaces: WorkspaceService
+    private readonly workspaces: WorkspaceService,
+    private readonly writingSkill: WritingSkillService
   ) {}
 
   @Get('models') models() { return { models: this.router.catalogue() }; }
@@ -135,10 +137,18 @@ export class ChatController {
       const workspace = workspaceId ? (await this.workspaces.list(user.sub)).find((item) => item.id === workspaceId && item.trust === 'TRUSTED') : undefined;
       const settings = workspace?.settings;
       const profile = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings.agentProfile as { instructions?: string } | undefined : undefined;
-      if (history.length > 18) sendReasoning(`Summary Agent 正在压缩 ${history.length - 18} 条历史消息`);
-      for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, profile?.instructions, abortController.signal)) {
-        answer += chunk;
-        response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
+      if (this.writingSkill.matches(enrichedContent)) {
+        const result = await this.writingSkill.run({ prompt: enrichedContent, history, userId: user.sub, workspaceId, onProgress: sendReasoning, onUsage: (item) => usage.push(item) });
+        for (const chunk of result.content.match(/[\s\S]{1,16}/g) ?? [result.content]) {
+          answer += chunk;
+          response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
+        }
+      } else {
+        if (history.length > 18) sendReasoning(`Summary Agent 正在压缩 ${history.length - 18} 条历史消息`);
+        for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, profile?.instructions, abortController.signal)) {
+          answer += chunk;
+          response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
+        }
       }
       }
       const assistant = await this.chat.addAssistantMessage(id, answer, trace.slice(-20));

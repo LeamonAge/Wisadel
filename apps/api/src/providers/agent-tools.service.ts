@@ -53,6 +53,9 @@ export class AgentToolsService {
       cwd: { type: 'string', description: '相对桌面工作区的工作目录，默认为 .' },
       timeoutSeconds: { type: 'integer', minimum: 1, maximum: 300, description: '超时秒数，默认 120' }
     }, ['program']),
+    this.tool('request_workspace_change', '当用户需要访问当前工作区范围外的本机文件时，请求用户选择并切换到新的工作区。该操作会在桌面端弹出目录选择，不会自动扩大访问范围。', {
+      reason: { type: 'string', description: '说明为何需要切换工作区' }
+    }, ['reason']),
     this.tool('download_file', '从公开 HTTP/HTTPS 地址下载文件到桌面工作区。适合下载依赖、图片、模型辅助文件或项目素材。', {
       url: { type: 'string', description: '公开的 HTTP/HTTPS 下载地址' },
       destination: { type: 'string', description: '相对桌面工作区的目标文件路径' }

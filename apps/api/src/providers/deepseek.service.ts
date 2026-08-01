@@ -102,7 +102,7 @@ export class DeepSeekService {
   }
 
   private executeTool(call: { name: string; arguments: string }, localContext?: { userId: string; workspaceId: string }) {
-    if (localContext && ['list_files', 'search_files', 'read_file', 'write_file', 'run_command'].includes(call.name)) {
+    if (localContext && ['list_files', 'search_files', 'read_file', 'write_file', 'run_command', 'request_workspace_change'].includes(call.name)) {
       let input: Record<string, unknown>; try { input = JSON.parse(call.arguments || '{}'); } catch { throw new ServiceUnavailableException('本机工具参数不是有效 JSON'); }
       return this.localActions.request(localContext.userId, localContext.workspaceId, call.name, input);
     }
@@ -115,7 +115,7 @@ export class DeepSeekService {
       const args = JSON.parse(rawArguments || '{}');
       detail = String(args.destination ?? args.path ?? args.query ?? args.url ?? '').slice(0, 120);
     } catch { /* provider arguments are validated by the tool layer */ }
-    const label = ({ list_files: '查看项目目录', search_files: '搜索相关代码', read_file: '读取文件', write_file: '写入文件', replace_in_file: '修改文件', copy_uploaded_file: '复制聊天附件', run_workspace_script: '运行工作区脚本', run_command: '运行程序或命令', download_file: '下载文件', fetch_web_page: '访问网页', search_web: '检索公开资料' } as Record<string, string>)[name] ?? '执行工具';
+    const label = ({ list_files: '查看项目目录', search_files: '搜索相关代码', read_file: '读取文件', write_file: '写入文件', replace_in_file: '修改文件', copy_uploaded_file: '复制聊天附件', run_workspace_script: '运行工作区脚本', run_command: '运行程序或命令', request_workspace_change: '请求切换工作区', download_file: '下载文件', fetch_web_page: '访问网页', search_web: '检索公开资料' } as Record<string, string>)[name] ?? '执行工具';
     return detail ? `${label}：${detail}` : label;
   }
 

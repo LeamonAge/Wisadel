@@ -231,6 +231,11 @@ if (!hasSingleInstanceLock) {
     const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
+  ipcMain.handle('wisadel:default-workspace', async () => {
+    const workspace = path.join(app.getPath('documents'), 'Wisadel Workspace');
+    await fs.mkdir(workspace, { recursive: true });
+    return workspace;
+  });
   ipcMain.handle('wisadel:workspace-context', (_event, workspacePath: string) => localWorkspaceContext(workspacePath));
   ipcMain.handle('wisadel:agent-list-files', async (_event, workspacePath: string, relativePath: string, depth: number) => {
     const root = path.resolve(workspacePath);

@@ -9,6 +9,7 @@ interface Window {
     openImageStudio: () => Promise<void>;
     captureScreen: () => Promise<string>;
     chooseWorkspace: () => Promise<string | null>;
+    defaultWorkspace: () => Promise<string>;
     workspaceContext: (workspacePath: string) => Promise<{ root: string; tree: Array<{ path: string; kind: 'file' | 'directory' }>; project: { languages: string[]; suggestedCommands: string[] }; git: { branch: string; status: string } }>;
     agentReadFile: (workspacePath: string, relativePath: string) => Promise<string>;
     agentListFiles: (workspacePath: string, relativePath: string, depth: number) => Promise<string>;

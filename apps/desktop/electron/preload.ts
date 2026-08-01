@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('wisadelDesktop', {
   openImageStudio: () => ipcRenderer.invoke('wisadel:open-image-studio'),
   captureScreen: () => ipcRenderer.invoke('wisadel:capture-screen') as Promise<string>,
   chooseWorkspace: () => ipcRenderer.invoke('wisadel:choose-workspace') as Promise<string | null>,
+  defaultWorkspace: () => ipcRenderer.invoke('wisadel:default-workspace') as Promise<string>,
   workspaceContext: (workspacePath: string) => ipcRenderer.invoke('wisadel:workspace-context', workspacePath) as Promise<{ root: string; tree: Array<{ path: string; kind: 'file' | 'directory' }>; project: { languages: string[]; suggestedCommands: string[] }; git: { branch: string; status: string } }>,
   agentReadFile: (workspacePath: string, relativePath: string) => ipcRenderer.invoke('wisadel:agent-read-file', workspacePath, relativePath) as Promise<string>,
   agentListFiles: (workspacePath: string, relativePath: string, depth: number) => ipcRenderer.invoke('wisadel:agent-list-files', workspacePath, relativePath, depth) as Promise<string>,

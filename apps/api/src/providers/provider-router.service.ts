@@ -81,7 +81,7 @@ export class ProviderRouterService {
     for (const chunk of text.match(/[\s\S]{1,16}/g) ?? [text]) yield chunk;
   }
   private executeTool(name: string, raw: string, localContext?: { userId: string; workspaceId: string }) {
-    if (localContext && ['list_files', 'search_files', 'read_file', 'write_file', 'run_command'].includes(name)) {
+    if (localContext && ['list_files', 'search_files', 'read_file', 'write_file', 'run_command', 'request_workspace_change'].includes(name)) {
       let input: Record<string, unknown>; try { input = JSON.parse(raw || '{}'); } catch { throw new ServiceUnavailableException('本机工具参数不是有效 JSON'); }
       return this.localActions.request(localContext.userId, localContext.workspaceId, name, input);
     }

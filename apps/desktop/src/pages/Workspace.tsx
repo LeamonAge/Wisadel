@@ -162,7 +162,6 @@ export function Workspace({
         <div className="titlebar-center">
           <span className="status-dot" />
           {standaloneImage ? 'Stable Diffusion AI' : 'Wisadel Preview'}
-          {!standaloneImage && <WorkspaceTrustMenu />}
         </div>
         <div className="titlebar-actions">
           <SanityCenter />
@@ -289,7 +288,16 @@ function LocalAgentRunner() {
           try {
             const input = action.input;
             const result =
-              action.tool === 'list_files'
+              action.tool === 'request_workspace_change'
+                ? await (async () => {
+                    const path = await window.wisadelDesktop?.chooseWorkspace();
+                    if (!path) throw new Error('用户取消了工作区切换');
+                    const registered = await api.registerWorkspace(path);
+                    const trusted = await api.trustWorkspace(registered.id, 'TRUSTED');
+                    localStorage.setItem('wisadel.workspaceId', trusted.id);
+                    return `已切换工作区：${trusted.name}。请在下一条消息中继续处理请求。`;
+                  })()
+                : action.tool === 'list_files'
                 ? await window.wisadelDesktop?.agentListFiles(
                     workspace.path,
                     String(input.path ?? '.'),
@@ -361,10 +369,14 @@ function WorkspaceTrustMenu() {
       .workspaces()
       .then((next) => {
         setItems(next);
-        if (!selected && next[0]) {
-          setSelected(next[0].id);
-          localStorage.setItem('wisadel.workspaceId', next[0].id);
-        }
+        if (!selected && next[0]) { setSelected(next[0].id); localStorage.setItem('wisadel.workspaceId', next[0].id); }
+        if (!next.length && window.wisadelDesktop) void (async () => {
+          const path = await window.wisadelDesktop?.defaultWorkspace();
+          if (!path) return;
+          const registered = await api.registerWorkspace(path, 'Wisadel Workspace');
+          const trusted = await api.trustWorkspace(registered.id, 'TRUSTED');
+          setItems([trusted]); setSelected(trusted.id); localStorage.setItem('wisadel.workspaceId', trusted.id);
+        })().catch(() => undefined);
       })
       .catch(() => undefined);
   }, [selected]);
@@ -529,6 +541,7 @@ function WorkspaceTrustMenu() {
           </section>
         </div>
       )}
+      <div className="workspace-settings-control">
       <button
         className={`workspace-trust-badge ${active.trust.toLowerCase()}`}
         onClick={() =>
@@ -546,6 +559,8 @@ function WorkspaceTrustMenu() {
         <span>{active.name}</span>
         <small>{active.trust === 'TRUSTED' ? '已信任' : '待信任'}</small>
       </button>
+      <button className="text-command" onClick={() => void choose()}>更改工作区</button>
+      </div>
     </>
   );
 }
@@ -2165,18 +2180,6 @@ function ImageViewer() {
   );
 }
 
-function WritingMaster() {
-  const [style, setStyle] = useState('fantasy');
-  const [prompt, setPrompt] = useState('');
-  const [history, setHistory] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [turns, setTurns] = useState<Array<{ role: 'user' | 'assistant'; content: string; trace?: string[] }>>([]);
-  const [busy, setBusy] = useState(false);
-  const styles = [['fantasy', '玄幻'], ['western_fantasy', '奇幻'], ['wuxia', '武侠'], ['romance', '言情'], ['sci_fi', '科幻'], ['mystery', '悬疑'], ['thriller', '惊悚'], ['historical', '历史'], ['military', '军事'], ['urban', '都市'], ['youth', '青春'], ['detective', '侦探'], ['horror', '恐怖'], ['fanfiction', '同人'], ['erotic', '性化']];
-  const submit = async () => { if (!prompt.trim() || busy) return; const request = prompt.trim(); setBusy(true); setTurns((value) => [...value, { role: 'user', content: request }]); try { const result = await api.writingMaster({ prompt: request, style, history }); setAnswer(result.content); setTurns((value) => [...value, { role: 'assistant', content: result.content, trace: result.trace }]); setHistory((value) => `${value}\n用户：${request}\n写作大师：${result.content}`.trim()); setPrompt(''); } catch (error) { const content = error instanceof Error ? error.message : '写作请求失败'; setTurns((value) => [...value, { role: 'assistant', content }]); } finally { setBusy(false); } };
-  return <main className="writing-master"><section className="writing-chat"><header><span>WRITING MASTER</span><h1>写作大师</h1><p>DeepSeek Pro 双重生成与审校</p></header><div className="writing-dialogue">{turns.length ? turns.map((turn, index) => <article className={`writing-turn ${turn.role}`} key={`${turn.role}-${index}`}><span>{turn.role === 'user' ? '你' : '写作大师'}</span><p>{turn.content}</p>{turn.role === 'assistant' && !!turn.trace?.length && <details><summary>执行过程</summary>{turn.trace.map((step, stepIndex) => <div key={`${step}-${stepIndex}`}>{step}</div>)}</details>}</article>) : <div className="writing-empty">可以像普通对话一样要求创作、读取或修改已信任工作区的文件，也可以要求检索公开网页。</div>}</div><div className={`writing-editor ${answer ? '' : 'empty'}`} contentEditable={!!answer} suppressContentEditableWarning onInput={(event) => setAnswer(event.currentTarget.innerText)}>{answer || '生成后的正文会显示在这里，可直接编辑。'}</div><div className="composer-wrap writing-composer"><div className="composer"><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="输入写作要求，或要求读取、修改文件和搜索资料" rows={1} disabled={busy} /><div className="composer-footer"><div className="composer-tools"><span>{busy ? '正在生成、调用工具并审校...' : 'Enter 发送 · Shift + Enter 换行'}</span></div><button type="button" className="send-command" onClick={() => void submit()} disabled={busy || !prompt.trim()} aria-label="生成内容" title="生成内容">{busy ? <Square size={16} /> : <Send size={17} />}</button></div></div></div></section><aside className="writing-options"><h2>写作风格</h2><div className="writing-style-grid">{styles.map(([id, label]) => <button type="button" key={id} className={style === id ? 'active' : ''} onClick={() => setStyle(id ?? 'fantasy')}>{label}</button>)}</div></aside></main>;
-}
-
 function PlaceholderPage({ page }: { page: 'models' | 'extensions' | 'plugins' }) {
   if (page === 'models') return <ModelsCatalog />;
   const copy = {
@@ -2220,7 +2223,6 @@ function PlaceholderPage({ page }: { page: 'models' | 'extensions' | 'plugins' }
 }
 
 function ModelsCatalog() {
-  const [mode, setMode] = useState<'catalog' | 'writing'>('catalog');
   const items = [
     {
       title: '图像能力',
@@ -2231,10 +2233,8 @@ function ModelsCatalog() {
       ready: false
     }
   ];
-  if (mode === 'writing') return <section className="models-workspace"><div className="models-mode-tabs"><button type="button" onClick={() => setMode('catalog')}>模型目录</button><button type="button" className="active">写作大师</button></div><WritingMaster /></section>;
   return (
     <section className="placeholder-page models-page">
-      <div className="models-mode-tabs"><button type="button" className="active">模型目录</button><button type="button" onClick={() => setMode('writing')}>写作大师</button></div>
       <div className="section-title">
         <span>MODEL CENTER</span>
         <h1>模型</h1>
@@ -2270,8 +2270,15 @@ function ProfileEditor() {
   const [name, setName] = useState(''); const [avatar, setAvatar] = useState(''); const [error, setError] = useState('');
   useEffect(() => { const open = (event: Event) => { const next = (event as CustomEvent<'user' | 'assistant'>).detail; setKind(next); const assistant = JSON.parse(localStorage.getItem('wisadel.assistantProfile') ?? '{"name":"Wisadel","avatarUrl":""}'); setName(next === 'user' ? user.nickname : assistant.name ?? 'Wisadel'); setAvatar(next === 'user' ? user.avatarUrl ?? '' : assistant.avatarUrl ?? ''); setError(''); }; window.addEventListener('wisadel:edit-profile', open); return () => window.removeEventListener('wisadel:edit-profile', open); }, [user]);
   if (!kind) return null;
+  const selectAvatar = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) { setError('请选择不超过 8MB 的图片文件。'); return; }
+    const image = new Image(); const source = URL.createObjectURL(file);
+    image.onload = () => { const size = Math.min(256, Math.max(image.naturalWidth, image.naturalHeight)); const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size; const scale = Math.max(size / image.naturalWidth, size / image.naturalHeight); const width = image.naturalWidth * scale; const height = image.naturalHeight * scale; canvas.getContext('2d')?.drawImage(image, (size - width) / 2, (size - height) / 2, width, height); URL.revokeObjectURL(source); setAvatar(canvas.toDataURL('image/jpeg', .9)); setError(''); };
+    image.onerror = () => { URL.revokeObjectURL(source); setError('无法读取该图片文件。'); }; image.src = source;
+  };
   const save = async () => { try { if (!name.trim()) throw new Error('名称不能为空'); if (kind === 'user') { const next = await api.updateProfile(name.trim(), avatar.trim() || null); setUser(next); localStorage.setItem('wisadel.user', JSON.stringify(next)); } else localStorage.setItem('wisadel.assistantProfile', JSON.stringify({ name: name.trim(), avatarUrl: avatar.trim() })); setKind(null); } catch (cause) { setError(cause instanceof Error ? cause.message : '保存失败'); } };
-    return <div className="modal-backdrop" onMouseDown={() => setKind(null)}><section className="settings-dialog profile-dialog" onMouseDown={(event) => event.stopPropagation()}><header><div><span>PROFILE</span><h2>{kind === 'user' ? '编辑用户资料' : '编辑 AI 资料'}</h2></div><button className="icon-button" onClick={() => setKind(null)}><X size={19} /></button></header><div className="settings-panel"><label className="setting-field">名称<input value={name} maxLength={50} onChange={(event) => setName(event.target.value)} /></label><label className="setting-field">头像 URL<input value={avatar} placeholder="https://... 或 data:image/..." onChange={(event) => setAvatar(event.target.value)} /></label>{error && <div className="setting-note">{error}</div>}<button className="text-command" onClick={() => void save()}>保存资料</button></div></section></div>;
+    return <div className="modal-backdrop" onMouseDown={() => setKind(null)}><section className="settings-dialog profile-dialog" onMouseDown={(event) => event.stopPropagation()}><header><div><span>PROFILE</span><h2>{kind === 'user' ? '编辑用户资料' : '编辑 AI 资料'}</h2></div><button className="icon-button" onClick={() => setKind(null)}><X size={19} /></button></header><div className="settings-panel"><label className="setting-field">名称<input value={name} maxLength={50} onChange={(event) => setName(event.target.value)} /></label><label className="setting-field">上传头像<input type="file" accept="image/*" onChange={(event) => selectAvatar(event.target.files?.[0])} /></label>{avatar && <img className="profile-avatar-preview" src={avatar} alt="头像预览" />}{error && <div className="setting-note">{error}</div>}<button className="text-command" onClick={() => void save()}>保存资料</button></div></section></div>;
 }
 
 function SettingsDialog() {
@@ -2346,7 +2353,7 @@ function SettingsDialog() {
   const saveAgentProfile = async (overrides: Partial<{ workStyle: string; workInstructions: string; persona: string; personaInstructions: string }> = {}) => {
     const workspaceId = localStorage.getItem('wisadel.workspaceId');
     if (!workspaceId) {
-      setAgentStatus('请先在标题栏选择并信任一个工作区。');
+      setAgentStatus('请先在设置的常规页面选择并信任一个工作区。');
       return;
     }
     const nextWorkStyle = overrides.workStyle ?? workStyle;
@@ -2454,6 +2461,13 @@ function SettingsDialog() {
             {tab === 'general' && (
               <>
                 <h3>常规</h3>
+                <div className="setting-row workspace-setting-row">
+                  <div>
+                    <strong>工作区</strong>
+                    <span>Agent 仅访问当前已信任目录及其子目录。</span>
+                  </div>
+                  <WorkspaceTrustMenu />
+                </div>
                 <div className="setting-row">
                   <div>
                     <strong>界面主题</strong>
