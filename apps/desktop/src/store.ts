@@ -108,6 +108,7 @@ const terminalTask = (task: ImageTask) => ['succeeded', 'failed', 'cancelled'].i
 type ConversationCache = Pick<AppState, 'sessions' | 'activeSessionId' | 'messages' | 'imageTask' | 'imageTasks' | 'sdParams' | 'reasoningSteps'>;
 const conversationCache: Partial<Record<SessionKind, ConversationCache>> = {};
 const inFlightSessions = new Set<string>();
+const requestEpochs = new Map<string, number>();
 let imagePoll: number | null = null;
 
 const stopImagePoll = () => {
@@ -275,9 +276,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!conversational(originPage)) return;
     if (!get().activeSessionId) await get().createSession();
     const sessionId = get().activeSessionId;
-    if (!sessionId || get().sending || inFlightSessions.has(sessionId)) return;
+    if (!sessionId) return;
+    // A new message while streaming is deliberate steering: cancel only this request and start a fresh turn.
+    if (inFlightSessions.has(sessionId)) {
+      api.cancelStream();
+      inFlightSessions.delete(sessionId);
+      requestEpochs.set(sessionId, (requestEpochs.get(sessionId) ?? 0) + 1);
+    }
     inFlightSessions.add(sessionId);
-    const isCurrent = () => get().activeSessionId === sessionId && get().page === originPage;
+    const epoch = (requestEpochs.get(sessionId) ?? 0) + 1;
+    requestEpochs.set(sessionId, epoch);
+    const isCurrent = () => get().activeSessionId === sessionId && get().page === originPage && requestEpochs.get(sessionId) === epoch;
     const optimistic: Message = {
       id: crypto.randomUUID(),
       clientId: crypto.randomUUID(),
@@ -309,16 +318,17 @@ export const useAppStore = create<AppState>((set, get) => ({
             imageError: null
           }));
           get().watchImageTask(task.id);
-        }
+        },
+        (session) => { if (isCurrent()) set((state) => ({ sessions: state.sessions.map((item) => item.id === session.id ? session : item) })); }
       );
-      inFlightSessions.delete(sessionId);
+      if (isCurrent()) inFlightSessions.delete(sessionId);
       delete conversationCache[originPage];
       if (!isCurrent()) return;
       set((state) => ({
         messages: [...state.messages.map((message) => message.id === optimistic.id ? { ...message, status: 'sent' as const } : message), assistant],
         sessions: state.sessions.map((session) => session.id === sessionId ? {
           ...session,
-          title: session.title === '新的对话' || session.title === '新的创作' ? (content.length > 28 ? `${content.slice(0, 28)}...` : content) : session.title,
+          title: session.title,
           preview: assistant.content,
           updatedAt: assistant.createdAt
         } : session),
@@ -330,7 +340,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         reconnecting: false
       }));
     } catch (error) {
-      inFlightSessions.delete(sessionId);
+      if (isCurrent()) inFlightSessions.delete(sessionId);
       delete conversationCache[originPage];
       if (!isCurrent()) return;
       set((state) => ({
@@ -363,7 +373,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   cancelMessage: () => {
     api.cancelStream();
-    set((state) => ({ sending: false, reconnecting: false, reasoningSteps: [...state.reasoningSteps, '已停止本轮生成'], reasoningCollapsed: false }));
+    const sessionId = get().activeSessionId;
+    if (sessionId) {
+      inFlightSessions.delete(sessionId);
+      requestEpochs.set(sessionId, (requestEpochs.get(sessionId) ?? 0) + 1);
+    }
+    set((state) => ({ messages: state.messages.map((message) => message.status === 'sending' ? { ...message, status: 'sent' as const } : message), sending: false, reconnecting: false, streamingText: '', reasoningSteps: [...state.reasoningSteps, '已停止本轮生成'], reasoningCollapsed: false }));
   },
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPreviewImage: (previewImageUrl) => set({ previewImageUrl }),

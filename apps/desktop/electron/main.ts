@@ -1,6 +1,6 @@
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { appendFileSync, promises as fs, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, promises as fs, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -16,6 +16,24 @@ const LOCAL_IGNORE = new Set(['node_modules', '.git', 'dist', 'build', 'coverage
 const LOCAL_TEXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.rs', '.java', '.cs', '.json', '.md', '.css', '.html', '.yml', '.yaml', '.toml']);
 const LOCAL_SECRET = /(^|[\\/])(\.env(?:\..*)?|\.npmrc|\.pypirc|id_rsa|id_ed25519|credentials|secrets?)([\\/]|$)/i;
 const LOCAL_PROGRAMS = new Set(['node', 'node.exe', 'npm', 'npm.cmd', 'npx', 'npx.cmd', 'python', 'python.exe', 'pytest', 'git', 'git.exe', 'cargo', 'cargo.exe', 'go', 'go.exe']);
+type SdHardware = { platform: 'nvidia' | 'amd' | 'cpu'; name: string; memoryMb?: number };
+let sdInstallProcess: ReturnType<typeof spawn> | null = null;
+
+const detectSdHardware = async (): Promise<SdHardware> => new Promise((resolveResult) => {
+  const child = spawn('powershell.exe', ['-NoProfile', '-Command', "$g=Get-CimInstance Win32_VideoController | Select-Object -First 1 Name,AdapterRAM; if($g){$g|ConvertTo-Json -Compress}"], { windowsHide: true });
+  let output = '';
+  child.stdout.on('data', (chunk) => output += chunk.toString());
+  child.on('close', () => {
+    try {
+      const gpu = JSON.parse(output.trim());
+      const name = String(gpu.Name ?? '');
+      const lower = name.toLowerCase();
+      const platform = lower.includes('nvidia') ? 'nvidia' : lower.includes('amd') || lower.includes('radeon') || lower.includes('intel') ? 'amd' : 'cpu';
+      resolveResult({ platform, name: name || 'CPU', memoryMb: Number(gpu.AdapterRAM) ? Math.round(Number(gpu.AdapterRAM) / 1024 / 1024) : undefined });
+    } catch { resolveResult({ platform: 'cpu', name: 'CPU' }); }
+  });
+  child.on('error', () => resolveResult({ platform: 'cpu', name: 'CPU' }));
+});
 
 const agentPath = (workspace: string, relativePath: string) => {
   if (path.isAbsolute(relativePath)) relativePath = path.relative(path.resolve(workspace), path.resolve(relativePath));
@@ -235,6 +253,62 @@ if (!hasSingleInstanceLock) {
     const workspace = path.join(app.getPath('documents'), 'Wisadel Workspace');
     await fs.mkdir(workspace, { recursive: true });
     return workspace;
+  });
+  ipcMain.handle('wisadel:detect-stable-diffusion', async () => {
+    const home = app.getPath('home');
+    const candidates = [path.join(home, 'stable-diffusion-webui'), path.join(home, 'Documents', 'stable-diffusion-webui'), 'C:\\stable-diffusion-webui', 'C:\\AI\\stable-diffusion-webui', path.join(app.getPath('userData'), 'a1111')];
+    const root = candidates.find((candidate) => existsSync(path.join(candidate, 'webui-user.bat')));
+    let running = false;
+    try { const response = await fetch('http://127.0.0.1:7860/sdapi/v1/options', { signal: AbortSignal.timeout(1200) }); running = response.ok; } catch { /* A1111 is not running */ }
+    return { installed: Boolean(root), root, running, endpoint: running ? 'http://127.0.0.1:7860' : undefined, hardware: await detectSdHardware() };
+  });
+  ipcMain.handle('wisadel:install-stable-diffusion', async (event) => {
+    if (sdInstallProcess) throw new Error('Stable Diffusion 安装正在进行');
+    const installerUrl = process.env.WISADEL_SD_INSTALLER_URL;
+    if (!installerUrl) throw new Error('服务器尚未配置 Stable Diffusion 官方安装包地址');
+    const targetRoot = path.join(app.getPath('userData'), 'a1111');
+    const archive = path.join(app.getPath('temp'), `wisadel-a1111-${Date.now()}.zip`);
+    const sendProgress = (payload: object) => BrowserWindow.fromWebContents(event.sender)?.webContents.send('wisadel:sd-install', payload);
+    try {
+      sendProgress({ type: 'preparing', percent: 0 });
+      const response = await fetch(installerUrl, { signal: AbortSignal.timeout(120_000) });
+      if (!response.ok) throw new Error(`安装包下载失败 (${response.status})`);
+      await fs.writeFile(archive, Buffer.from(await response.arrayBuffer()));
+      sendProgress({ type: 'downloaded', percent: 55 });
+      await fs.mkdir(targetRoot, { recursive: true });
+      await new Promise<void>((resolveResult, reject) => {
+        const child = spawn('powershell.exe', ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${archive.replace(/'/g, "''")}' -DestinationPath '${targetRoot.replace(/'/g, "''")}' -Force`], { windowsHide: true });
+        sdInstallProcess = child;
+        let error = '';
+        child.stderr.on('data', (chunk) => error += chunk.toString());
+        child.on('error', reject);
+        child.on('close', (code) => code === 0 ? resolveResult() : reject(new Error(error || `解压失败 (${code})`)));
+      });
+      let installRoot = targetRoot;
+      if (!existsSync(path.join(installRoot, 'webui.bat'))) {
+        const childDirectory = (await fs.readdir(targetRoot, { withFileTypes: true })).find((entry) => entry.isDirectory() && existsSync(path.join(targetRoot, entry.name, 'webui.bat')));
+        if (childDirectory) installRoot = path.join(targetRoot, childDirectory.name);
+      }
+      if (!existsSync(path.join(installRoot, 'webui.bat'))) throw new Error('安装包不是有效的 A1111 官方 WebUI 包');
+      const hardware = await detectSdHardware();
+      const args = hardware.platform === 'nvidia' ? '--api --listen 127.0.0.1' : hardware.platform === 'amd' ? '--api --listen 127.0.0.1 --use-directml' : '--api --listen 127.0.0.1 --skip-torch-cuda-test --precision full --no-half';
+      await fs.writeFile(path.join(installRoot, 'webui-user.bat'), `@echo off\nset COMMANDLINE_ARGS=${args}\ncall webui.bat\n`, 'utf8');
+      sendProgress({ type: 'installed', percent: 100, root: installRoot, hardware });
+      return { root: installRoot, hardware };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      sendProgress({ type: 'error', message });
+      throw error;
+    } finally {
+      sdInstallProcess = null;
+      await fs.rm(archive, { force: true }).catch(() => undefined);
+    }
+  });
+  ipcMain.handle('wisadel:start-stable-diffusion', async (_event, root: string) => {
+    const resolved = path.resolve(root);
+    if (!existsSync(path.join(resolved, 'webui-user.bat'))) throw new Error('A1111 启动文件不存在');
+    spawn('cmd.exe', ['/c', 'webui-user.bat'], { cwd: resolved, detached: true, windowsHide: true, stdio: 'ignore' }).unref();
+    return { endpoint: 'http://127.0.0.1:7860' };
   });
   ipcMain.handle('wisadel:workspace-context', (_event, workspacePath: string) => localWorkspaceContext(workspacePath));
   ipcMain.handle('wisadel:agent-list-files', async (_event, workspacePath: string, relativePath: string, depth: number) => {

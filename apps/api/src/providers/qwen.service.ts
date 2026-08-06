@@ -6,7 +6,7 @@ import { ImageStorageService } from '../shared/image-storage.service';
 export class QwenService {
   constructor(private readonly images: ImageStorageService) {}
 
-  get configured() { return Boolean(process.env.QWEN_API_KEY && process.env.QWEN_BASE_URL); }
+  get configured() { return Boolean(this.providerKey && this.providerBase); }
 
   async extract(userText: string, current: SdParams, imageUrls: string[] = [], capabilities?: SdCapabilities): Promise<ImageAgentAction> {
     if ((process.env.AI_MODE ?? 'mock') === 'mock' || !this.configured) return this.fallback(userText, current);
@@ -16,11 +16,11 @@ export class QwenService {
       { type: 'text', text: `${userText}${reference ? `\n\n公开资料摘要（用于识别角色/作品，需在回复中说明已参考）：\n${reference}` : ''}` },
       ...visionSources.map((url) => ({ type: 'image_url', image_url: { url } }))
     ] : `${userText}${reference ? `\n\n公开资料摘要（用于识别角色/作品，需在回复中说明已参考）：\n${reference}` : ''}`;
-    const response = await fetch(`${process.env.QWEN_BASE_URL!.replace(/\/$/, '')}/chat/completions`, {
+    const response = await fetch(`${this.providerBase!.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${process.env.QWEN_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${this.providerKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: visionSources.length ? process.env.QWEN_VISION_MODEL ?? 'qwen-vl-plus' : process.env.QWEN_MODEL,
+        model: visionSources.length ? this.providerVisionModel : this.providerModel,
         temperature: 0.2,
         response_format: { type: 'json_object' },
         messages: [
@@ -59,11 +59,11 @@ export class QwenService {
   async repairSdError(error: string, current: SdParams, capabilities: SdCapabilities): Promise<Partial<SdParams> | null> {
     if ((process.env.AI_MODE ?? 'mock') === 'mock' || !this.configured) return null;
     try {
-      const response = await fetch(`${process.env.QWEN_BASE_URL!.replace(/\/$/, '')}/chat/completions`, {
+      const response = await fetch(`${this.providerBase!.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${process.env.QWEN_API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${this.providerKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: process.env.QWEN_MODEL,
+          model: this.providerModel,
           temperature: 0,
           response_format: { type: 'json_object' },
           messages: [
@@ -93,11 +93,11 @@ export class QwenService {
 
   private async compileFallback(userText: string, current: SdParams, capabilities?: SdCapabilities): Promise<ImageAgentAction> {
     try {
-      const response = await fetch(`${process.env.QWEN_BASE_URL!.replace(/\/$/, '')}/chat/completions`, {
+      const response = await fetch(`${this.providerBase!.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${process.env.QWEN_API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${this.providerKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: process.env.QWEN_MODEL,
+          model: this.providerModel,
           temperature: 0.1,
           response_format: { type: 'json_object' },
           messages: [
@@ -131,4 +131,9 @@ export class QwenService {
     if (current.mode === 'img2img') return '当前语言模型无法协助整理该提示词。你可以在右侧切换或保持“图生图”，手动填写提示词并上传原图，调整重绘强度后直接提交 Stable Diffusion；手动提示词不会发送给语言模型。';
     return '当前语言模型无法协助整理该提示词。你可以直接在右侧手动填写 Stable Diffusion 提示词和参数，再点击“确认并生成”；手动提示词不会发送给语言模型。';
   }
+
+  private get providerKey() { return process.env.OPENOX_GROK_API_KEY ?? process.env.QWEN_API_KEY; }
+  private get providerBase() { return process.env.OPENOX_BASE_URL ?? process.env.QWEN_BASE_URL; }
+  private get providerModel() { return process.env.GROK_MODEL ?? 'grok-4.5'; }
+  private get providerVisionModel() { return process.env.GROK_VISION_MODEL ?? this.providerModel; }
 }

@@ -217,12 +217,34 @@ export function Workspace({
         {page === 'image' && <ImageInspector />}
       </div>
       <SettingsDialog />
+      {!standaloneImage && <SdConnectionGate />}
       <ProfileEditor />
       <ImageViewer />
       {!standaloneImage && <LocalAgentRunner />}
       {!standaloneImage && <WorkspaceAuditPanel />}
     </main>
   );
+}
+
+function SdConnectionGate() {
+  const page = useAppStore((state) => state.page);
+  const setPage = useAppStore((state) => state.setPage);
+  const [state, setState] = useState<'idle' | 'checking' | 'found' | 'missing' | 'downloading' | 'installed' | 'error'>('idle');
+  const [detail, setDetail] = useState<{ root?: string; running: boolean } | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (page !== 'image') { setState('idle'); setDetail(null); return; }
+    if (state !== 'idle') return;
+    setState('checking');
+    void window.wisadelDesktop?.detectStableDiffusion().then((result) => { setDetail(result); setState(result.installed ? 'found' : 'missing'); }).catch(() => setState('missing'));
+  }, [page, state]);
+  useEffect(() => window.wisadelDesktop?.onStableDiffusionInstall((event) => { setProgress(event.percent ?? 0); if (event.type === 'installed') { localStorage.setItem('wisadel.localSdRoot', event.root ?? ''); setState('installed'); } if (event.type === 'error') { setError(event.message ?? '安装失败'); setState('error'); } }), []);
+  if (page !== 'image' || state === 'idle') return null;
+  const leave = () => void setPage('chat');
+  const install = () => { setError(''); setProgress(0); setState('downloading'); void window.wisadelDesktop?.installStableDiffusion().catch((reason) => { setError(reason instanceof Error ? reason.message : String(reason)); setState('error'); }); };
+  const connect = () => { const root = detail?.root ?? localStorage.getItem('wisadel.localSdRoot') ?? ''; localStorage.setItem('wisadel.localSdRoot', root); if (detail?.running) { localStorage.setItem('wisadel.localSdEndpoint', 'http://127.0.0.1:7860'); setState('idle'); return; } void window.wisadelDesktop?.startStableDiffusion(root).then(({ endpoint }) => { localStorage.setItem('wisadel.localSdEndpoint', endpoint); setState('idle'); }).catch((reason) => { setError(reason instanceof Error ? reason.message : String(reason)); setState('error'); }); };
+  return <div className="modal-backdrop sd-connection-gate"><section className="settings-dialog profile-dialog"><header><div><span>STABLE DIFFUSION</span><h2>{state === 'checking' ? '正在检测中' : state === 'found' ? '检测到 Stable Diffusion' : state === 'installed' ? 'Stable Diffusion 已安装' : state === 'error' ? '安装失败' : '尚未安装 Stable Diffusion'}</h2></div></header><div className="settings-panel">{state === 'checking' ? <div className="setting-note">正在检查本机 A1111、启动状态和可用接口。</div> : state === 'found' ? <><div className="setting-note">{detail?.running ? 'A1111 已在本机运行。' : '已找到本机 A1111，Wisadel 将协助启动并配置连接。'}</div><button className="text-command" onClick={connect}>是，连接到 Wisadel</button><button className="text-command" onClick={leave}>否，返回对话</button></> : state === 'missing' ? <><div className="setting-note">您当前还未下载 Stable Diffusion。是否需要下载官方 A1111？</div><button className="text-command" onClick={install}>是，下载</button><button className="text-command" onClick={leave}>否，返回对话</button></> : state === 'downloading' ? <div className="setting-note">正在下载并安装官方 A1111：{Math.round(progress)}%</div> : state === 'installed' ? <><div className="setting-note">安装完成。Wisadel 已根据本机硬件生成启动配置。</div><button className="text-command" onClick={connect}>启动并进入 Stable Diffusion</button></> : <><div className="setting-note">{error}</div><button className="text-command" onClick={install}>重试</button><button className="text-command" onClick={leave}>返回对话</button></>}</div></section></div>;
 }
 
 function WorkspaceAuditPanel() {
@@ -949,6 +971,7 @@ function Conversation({
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [showReturnBottom, setShowReturnBottom] = useState(false);
   const [backgroundStarting, setBackgroundStarting] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -1000,7 +1023,7 @@ function Conversation({
     };
   }, [page, activeId]);
   const submit = () => {
-    if (sending || uploading) return;
+    if (uploading) return;
     const hasFiles = pendingImages.length || pendingAttachments.length;
     const value =
       input.trim() ||
@@ -1060,6 +1083,23 @@ function Conversation({
   };
   const returnToBottom = () =>
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+  const copyMessage = async (id: string, content: string) => {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(content);
+      else {
+        const area = document.createElement('textarea');
+        area.value = content;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        if (!document.execCommand('copy')) throw new Error('复制失败');
+        area.remove();
+      }
+      setCopiedMessageId(id);
+      window.setTimeout(() => setCopiedMessageId((current) => current === id ? null : current), 1600);
+    } catch { setCaptureError('无法访问系统剪贴板'); }
+  };
 
   return (
     <section className="conversation">
@@ -1158,7 +1198,7 @@ function Conversation({
               <div className="message-content">{renderMessageContent(message.content)}</div>
               {message.role === 'assistant' && (
                 <div className="message-actions">
-                  <button title="复制回复" onClick={() => void navigator.clipboard?.writeText(message.content)}><Copy size={14} /></button>
+                  <button title={copiedMessageId === message.id ? '已复制' : '复制回复'} onClick={() => void copyMessage(message.id, message.content)}><Copy size={14} /></button>
                   <button title="继续生成" onClick={() => void send('请继续上一条回复。')}><ChevronDown size={14} /></button>
                   <button title="重新生成" onClick={() => void send('请基于本轮用户需求重新生成上一条回复。')}><RotateCcw size={14} /></button>
                 </div>
@@ -1341,7 +1381,7 @@ function Conversation({
                     ? '正在截取屏幕'
                     : uploading
                       ? '正在上传文件'
-                      : 'Enter 发送 · Shift + Enter 换行'}
+                      : sending ? 'Enter 可发送引导消息 · 方形按钮停止' : 'Enter 发送 · Shift + Enter 换行'}
               </span>
             </div>
             <button
@@ -1349,12 +1389,12 @@ function Conversation({
               className="send-command"
               onClick={sending ? cancelMessage : submit}
               disabled={
-                (!input.trim() && !pendingImages.length && !pendingAttachments.length) ||
+                !sending && ((!input.trim() && !pendingImages.length && !pendingAttachments.length) ||
                 uploading ||
-                !activeId
+                !activeId)
               }
               aria-label="发送消息"
-              title="发送消息"
+              title={sending ? '停止生成' : '发送消息'}
             >
               {sending ? <Square size={16} /> : <Send size={17} />}
             </button>

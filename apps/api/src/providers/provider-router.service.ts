@@ -50,6 +50,17 @@ export class ProviderRouterService {
   constructor(private readonly deepseek: DeepSeekService, private readonly tools: AgentToolsService, private readonly localActions: LocalAgentActionService) {}
   catalogue() { return CATALOGUE.filter((entry) => Boolean(this.keyFor(entry))); }
   defaultModel() { return 'deepseek-ai/DeepSeek-V4-Flash'; }
+  async summarizeTitle(model: string, request: string, answer: string): Promise<string | null> {
+    const entry = CATALOGUE.find((item) => item.id === model) ?? CATALOGUE[0];
+    const key = entry && this.keyFor(entry);
+    if (!entry || !key) return null;
+    const base = entry.provider === 'siliconflow' ? (process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1') : (process.env.OPENOX_BASE_URL ?? 'https://openox.tech/v1');
+    const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: entry.id, temperature: 0.1, max_tokens: 48, messages: [{ role: 'system', content: '为这段对话生成一个简洁、具体的中文标题。只输出标题本身，不加引号、序号或标点。标题不超过 18 个汉字，概括用户目标与已处理主题。' }, { role: 'user', content: `用户请求：${request.slice(0, 1800)}\n\n回复摘要：${answer.slice(0, 1800)}` }] }) });
+    const body = await response.json().catch(() => null) as any;
+    if (!response.ok) return null;
+    const title = String(body?.choices?.[0]?.message?.content ?? '').replace(/["'“”]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    return title || null;
+  }
   async *stream(model: string, messages: Message[], latest: string, onProgress?: (label: string) => void, onUsage?: (usage: SettledModelUsage) => void, localContext?: { userId: string; workspaceId: string }, profileInstructions?: string, signal?: AbortSignal): AsyncGenerator<string> {
     const entry = CATALOGUE.find((item) => item.id === model) ?? CATALOGUE[0];
     if (!entry || entry.provider === 'deepseek') { yield* this.deepseek.stream(messages, latest, onProgress, onUsage, localContext, profileInstructions, signal); return; }
@@ -69,12 +80,13 @@ export class ProviderRouterService {
       const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
       if (!calls.length) { text = String(message.content ?? '任务已完成。'); break; }
       conversation.push({ role: 'assistant', content: message.content ?? null, tool_calls: calls });
-      onProgress?.('正在执行 Agent 工具');
       for (const call of calls) {
         if (signal?.aborted) return;
         const name = String(call.function?.name ?? ''); const raw = String(call.function?.arguments ?? '{}');
+        onProgress?.(`正在调用 ${this.toolLabel(name)}`);
         const result = await this.executeTool(name, raw, localContext).catch((error) => `工具执行失败：${error instanceof Error ? error.message : '未知错误'}`);
         conversation.push({ role: 'tool', tool_call_id: call.id, content: result });
+        onProgress?.(`${this.toolLabel(name)} 已完成，正在根据结果继续处理`);
       }
     }
     if (!text) text = '工具调用已达到十轮上限，请根据当前结果继续下一步。';
@@ -87,6 +99,7 @@ export class ProviderRouterService {
     }
     return this.tools.execute({ name, arguments: raw });
   }
+  private toolLabel(name: string) { return ({ list_files: '查看项目目录', search_files: '搜索相关文件', read_file: '读取文件', write_file: '写入文件', replace_in_file: '修改文件', run_command: '运行命令', run_workspace_script: '运行工作区脚本', search_web: '检索公开资料', fetch_web_page: '访问网页', download_file: '下载文件', copy_uploaded_file: '复制附件' } as Record<string, string>)[name] ?? 'Agent 工具'; }
   private keyFor(entry: PublicModel) {
     if (entry.provider === 'siliconflow') return process.env.SILICONFLOW_API_KEY;
     if (entry.family === 'Claude') return process.env.OPENOX_CLAUDE_API_KEY ?? process.env.OPENOX_API_KEY ?? process.env.OPENOX_TEXT_API_KEY;

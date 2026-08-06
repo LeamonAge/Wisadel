@@ -223,6 +223,7 @@ export const healthSchema = z.object({
     redis: z.enum(['up', 'mock', 'down']),
     deepseek: z.enum(['configured', 'mock', 'unavailable']),
     qwen: z.enum(['configured', 'mock', 'unavailable']),
+    grok: z.enum(['configured', 'mock', 'unavailable']),
     stableDiffusion: z.enum(['configured', 'mock', 'unavailable'])
   })
 });

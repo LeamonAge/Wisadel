@@ -107,6 +107,16 @@ export class ChatController {
     }));
       const enrichedContent = `${input.content || '请分析附件。'}${attachmentTexts.join('')}`;
       if (session.kind === 'image') {
+      const workspaceId = request.header('x-wisadel-workspace-id');
+      const localContext = workspaceId ? { userId: user.sub, workspaceId } : undefined;
+      const useGeneralAgent = /读取|查看.*文件|修改.*文件|搜索.*网页|浏览.*网页|运行.*命令|工作区|写作|代码|脚本/.test(enrichedContent);
+      if (useGeneralAgent) {
+        sendReasoning('图像 Agent：切换到完整工具对话');
+        for await (const chunk of this.router.stream('grok-4.5', history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, '你处于 Stable Diffusion 工作区。保留完整 Agent 工具能力；涉及图像生成时，先检查本机 SD 环境、模型与参数，再给出可执行步骤。', abortController.signal)) {
+          answer += chunk;
+          response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
+        }
+      } else {
       sendReasoning('正在理解创作需求');
       const currentParams = input.currentParams ?? DEFAULT_SD_PARAMS;
       sendReasoning('正在读取 Stable Diffusion 组件');
@@ -131,6 +141,7 @@ export class ChatController {
       for (const chunk of answer.match(/.{1,8}/gu) ?? [answer]) {
         response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
+      }
       } else {
       const workspaceId = request.header('x-wisadel-workspace-id');
       const localContext = workspaceId ? { userId: user.sub, workspaceId } : undefined;
@@ -152,6 +163,8 @@ export class ChatController {
       }
       }
       const assistant = await this.chat.addAssistantMessage(id, answer, trace.slice(-20));
+      const titledSession = await this.chat.autoTitle(user.sub, id, input.content, answer);
+      response.write(`event: session\ndata: ${JSON.stringify(titledSession)}\n\n`);
       if (session.kind === 'chat' && usage.length) {
       const entries = await this.billing.settleChatUsage(user.sub, usage);
       const latest = entries.at(-1);

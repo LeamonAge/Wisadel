@@ -102,7 +102,7 @@ export class ApiClient {
     return payload as UploadFileResponse;
   };
 
-  async streamMessage(sessionId: string, content: string, imageUrls: string[], attachments: Attachment[], currentParams: SdParams, onDelta: (delta: string) => void, onReasoning?: (label: string) => void, onParams?: (action: ImageAgentAction) => void, onImageTask?: (task: ImageTask) => void): Promise<Message> {
+  async streamMessage(sessionId: string, content: string, imageUrls: string[], attachments: Attachment[], currentParams: SdParams, onDelta: (delta: string) => void, onReasoning?: (label: string) => void, onParams?: (action: ImageAgentAction) => void, onImageTask?: (task: ImageTask) => void, onSession?: (session: Session) => void): Promise<Message> {
     const clientId = crypto.randomUUID();
     this.streamAbortController = new AbortController();
     let response = await this.openMessageStream(sessionId, clientId, content, imageUrls, attachments, currentParams);
@@ -133,6 +133,7 @@ export class ApiClient {
         if (event === 'reasoning') onReasoning?.(data.label);
         if (event === 'params') onParams?.(data);
         if (event === 'image_task') onImageTask?.(data);
+        if (event === 'session') onSession?.(data);
         if (event === 'sanity') window.dispatchEvent(new CustomEvent('wisadel:sanity', { detail: data }));
         if (event === 'error') throw new Error(data.message ?? '模型服务暂时不可用');
         if (event === 'done') result = data;

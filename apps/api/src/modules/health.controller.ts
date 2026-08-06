@@ -17,7 +17,8 @@ export class HealthController {
         database: memory ? 'mock' : 'up',
         redis: redis ? 'up' : 'mock',
         deepseek: mock ? 'mock' : process.env.DEEPSEEK_API_KEY ? 'configured' : 'unavailable',
-        qwen: mock ? 'mock' : process.env.QWEN_API_KEY ? 'configured' : 'unavailable',
+        qwen: mock ? 'mock' : (process.env.OPENOX_GROK_API_KEY || process.env.QWEN_API_KEY) ? 'configured' : 'unavailable',
+        grok: mock ? 'mock' : process.env.OPENOX_GROK_API_KEY ? 'configured' : 'unavailable',
         stableDiffusion: (process.env.SD_MODE ?? 'mock') === 'remote' && process.env.SD_BASE_URL ? 'configured' : 'unavailable'
       }
     };
