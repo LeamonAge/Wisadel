@@ -64,7 +64,9 @@ export class ChatService {
 
   async autoTitle(userId: string, sessionId: string, request: string, answer: string) {
     const session = await this.getOwnedSession(userId, sessionId);
-    if (session.title !== '新的对话' && session.title !== '新的创作') return session;
+    // The first user message may already have produced a fallback truncated title.
+    // Treat that exact fallback as auto-generated, while preserving any other user title.
+    if (session.title !== '新的对话' && session.title !== '新的创作' && session.title !== this.titleFrom(request)) return session;
     const generated = await Promise.resolve(this.router.summarizeTitle?.(session.model, request, answer)).catch(() => null);
     return this.store.renameSession(userId, sessionId, generated ?? this.titleFrom(request));
   }

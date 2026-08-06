@@ -312,12 +312,12 @@ function LocalAgentRunner() {
             const result =
               action.tool === 'request_workspace_change'
                 ? await (async () => {
-                    const path = await window.wisadelDesktop?.chooseWorkspace();
-                    if (!path) throw new Error('用户取消了工作区切换');
-                    const registered = await api.registerWorkspace(path);
+                    const requestedPath = String(input.path ?? '').trim();
+                    if (!requestedPath) throw new Error('需要用户在对话中提供目标工作区目录后才能切换');
+                    const registered = await api.registerWorkspace(requestedPath);
                     const trusted = await api.trustWorkspace(registered.id, 'TRUSTED');
                     localStorage.setItem('wisadel.workspaceId', trusted.id);
-                    return `已切换工作区：${trusted.name}。请在下一条消息中继续处理请求。`;
+                    return `已按用户提供的路径切换工作区：${trusted.name}。将继续读取该目录。`;
                   })()
                 : action.tool === 'list_files'
                 ? await window.wisadelDesktop?.agentListFiles(
@@ -1264,7 +1264,7 @@ function Conversation({
                 <details className="reasoning-panel" open={!reasoningCollapsed}>
                   <summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}>
                     <Sparkles size={14} />
-                    正在思考与执行
+                    思考过程与执行
                   </summary>
                   <LiveAgentThinking steps={reasoningSteps} />
                   <AgentTimeline steps={reasoningSteps} active />

@@ -39,6 +39,7 @@ export class DeepSeekService {
 
 文件工具仅限授权工作区。不得尝试读取环境变量、.env、凭据、密钥或绕过路径限制。不要覆盖与任务无关的内容。网页工具用于读取用户提供或任务需要的公开网页，不得探测本机、局域网或云元数据地址。使用自信、冷静、简洁且准确的中文回答。`
       },
+      { role: 'system' as const, content: '每次调用工具前先输出一句简短的公开工作摘要，说明准备检查什么以及原因；工具返回后说明结果类型和下一步。不要输出隐藏推理。用户消息中已给出绝对目录时，request_workspace_change 必须带上 path 参数，不要要求用户再次选择。' },
       ...(localContext ? [{ role: 'system' as const, content: '当前任务已关联用户在桌面端信任的本机工作区。文件读取、写入与命令工具会在该工作区的真实路径中执行；当工作区是磁盘根目录时，工作区内的绝对路径也可以使用。不要根据服务器工作目录拒绝用户工作区内的文件。' }] : []),
       ...(profileInstructions ? [{ role: 'system' as const, content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []),
       ...(compacted.summary ? [{ role: 'system' as const, content: `SUMMARY AGENT CONTEXT COMPRESSION:\n${compacted.summary}` }] : []),
@@ -48,6 +49,8 @@ export class DeepSeekService {
 
     try {
       onProgress?.('正在分析任务');
+      const visiblePlan = await this.visiblePlan(latest, signal);
+      for (const item of visiblePlan) onProgress?.(item);
       let finalText = '';
       const callCounts = new Map<string, number>();
       let stopReason = '';
@@ -82,6 +85,7 @@ export class DeepSeekService {
           }
           conversation.push({ role: 'tool', tool_call_id: call.id, content: result });
           onProgress?.(this.toolCompletion(call.function.name, result));
+          onProgress?.(await this.visibleReflection(latest, call.function.name, result, signal));
         }
         if (stopReason) break;
       }
@@ -130,6 +134,29 @@ export class DeepSeekService {
     if (name === 'run_command' || name === 'run_workspace_script') return '命令已返回，正在检查输出与下一步';
     if (name === 'search_web' || name === 'fetch_web_page') return `资料获取完成，正在整理 ${count} 条可用信息`;
     return `${this.toolLabel(name, '{}')} 已完成，正在整合结果`;
+  }
+
+  private async visiblePlan(latest: string, signal?: AbortSignal) {
+    try {
+      const plan = await this.complete([
+        { role: 'system', content: '为用户请求生成可公开展示的执行计划。只输出 2 到 4 条简短中文，每条一行，以“将…”“先…”“随后…”等动词开始。只描述任务目标、信息核对和将要执行的工具方向；不要输出隐藏推理、逐字思维链、密钥、路径或任何敏感数据。' },
+        { role: 'user', content: latest }
+      ], false, process.env.DEEPSEEK_MODEL ?? 'deepseek-chat', signal);
+      const content = plan.message.content ?? '';
+      return content.split(/\r?\n|[。；]/).map((item) => item.replace(/^[-*\d.、\s]+/, '').trim()).filter((item) => item.length >= 4).slice(0, 4);
+    } catch { return ['正在归纳任务目标与可用信息', '正在确定最合适的处理步骤']; }
+  }
+
+  private async visibleReflection(latest: string, tool: string, result: string, signal?: AbortSignal) {
+    const outcome = this.toolCompletion(tool, result);
+    try {
+      const reflection = await this.complete([
+        { role: 'system', content: '根据用户目标和刚完成的工具动作，输出一句可公开展示的中文判断。说明这项结果对任务意味着什么，以及接下来应继续核对或处理什么。不要输出隐藏推理、逐字思维链、敏感路径、密钥或工具原始内容；只输出一句，不加标题。' },
+        { role: 'user', content: `用户目标：${latest.slice(0, 800)}\n已完成动作：${this.toolLabel(tool, '{}')}\n公开结果摘要：${outcome}` }
+      ], false, process.env.DEEPSEEK_MODEL ?? 'deepseek-chat', signal);
+      const content = String(reflection.message.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 220);
+      return content || `判断：${outcome}`;
+    } catch { return `判断：${outcome}`; }
   }
 
   private async complete(messages: ProviderMessage[], allowTools = true, model = process.env.DEEPSEEK_MODEL ?? 'deepseek-chat', signal?: AbortSignal): Promise<ProviderReply> {

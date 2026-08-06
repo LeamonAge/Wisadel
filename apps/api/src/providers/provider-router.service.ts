@@ -68,6 +68,7 @@ export class ProviderRouterService {
     if (!key) throw new ServiceUnavailableException(`${entry.provider} API 未配置`);
     const compacted = compactContext(messages);
     const conversation: Array<any> = [{ role: 'system', content: buildAgentSystemPrompt(this.tools.workspaceRoot) }, ...(localContext ? [{ role: 'system', content: '当前任务已关联用户在桌面端信任的本机工作区。文件读取、写入与命令工具会在该工作区的真实路径中执行；当工作区是磁盘根目录时，工作区内的绝对路径也可以使用。不要根据服务器工作目录拒绝用户工作区内的文件。' }] : []), ...(profileInstructions ? [{ role: 'system', content: `WORKSPACE AGENT CONFIGURATION (user-owned):\n${profileInstructions.slice(0, 12000)}\n\nApply this configuration to this entire task. It takes precedence over the default communication style and behavior directions above. Only fixed safety rules, access limits, and required confirmations may override it.` }] : []), ...(compacted.summary ? [{ role: 'system', content: `SUMMARY AGENT CONTEXT COMPRESSION:\n${compacted.summary}` }] : []), ...compacted.messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })), { role: 'user', content: latest }];
+    for (const item of await this.visiblePlan(entry, key, base, latest, signal)) onProgress?.(item);
     let text = '';
     for (;;) {
       if (signal?.aborted) return;
@@ -87,6 +88,7 @@ export class ProviderRouterService {
         const result = await this.executeTool(name, raw, localContext).catch((error) => `工具执行失败：${error instanceof Error ? error.message : '未知错误'}`);
         conversation.push({ role: 'tool', tool_call_id: call.id, content: result });
         onProgress?.(this.toolCompletion(name, result));
+        onProgress?.(await this.visibleReflection(entry, key, base, latest, name, result, signal));
       }
     }
     if (!text) text = '工具调用已达到十轮上限，请根据当前结果继续下一步。';
@@ -110,6 +112,22 @@ export class ProviderRouterService {
     if (name === 'run_command' || name === 'run_workspace_script') return '命令已返回，正在检查输出与下一步';
     if (name === 'search_web' || name === 'fetch_web_page') return `资料获取完成，正在整理 ${count} 条可用信息`;
     return `${this.toolLabel(name)} 已完成，正在整合结果`;
+  }
+  private async visiblePlan(entry: PublicModel, key: string, base: string, latest: string, signal?: AbortSignal) {
+    try {
+      const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', signal, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: entry.id, temperature: 0.1, max_tokens: 160, messages: [{ role: 'system', content: '为用户请求生成可公开展示的执行计划。只输出 2 到 4 条简短中文，每条一行，以“将…”“先…”“随后…”等动词开始。只描述任务目标、信息核对和将要执行的工具方向；不要输出隐藏推理、逐字思维链、密钥、路径或敏感数据。' }, { role: 'user', content: latest.slice(0, 1800) }] }) });
+      const body = await response.json().catch(() => null) as any;
+      return String(body?.choices?.[0]?.message?.content ?? '').split(/\r?\n|[。；]/).map((item) => item.replace(/^[-*\d.、\s]+/, '').trim()).filter((item) => item.length >= 4).slice(0, 4);
+    } catch { return ['正在归纳任务目标与可用信息', '正在确定最合适的处理步骤']; }
+  }
+  private async visibleReflection(entry: PublicModel, key: string, base: string, latest: string, tool: string, result: string, signal?: AbortSignal) {
+    const outcome = this.toolCompletion(tool, result);
+    try {
+      const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', signal, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: entry.id, temperature: 0.1, max_tokens: 100, messages: [{ role: 'system', content: '根据用户目标和刚完成的工具动作，输出一句可公开展示的中文判断。说明结果对任务意味着什么，以及下一步应继续核对或处理什么。不要输出隐藏推理、逐字思维链、敏感路径、密钥或工具原始内容；只输出一句，不加标题。' }, { role: 'user', content: `用户目标：${latest.slice(0, 800)}\n已完成动作：${this.toolLabel(tool)}\n公开结果摘要：${outcome}` }] }) });
+      const body = await response.json().catch(() => null) as any;
+      const content = String(body?.choices?.[0]?.message?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 220);
+      return content || `判断：${outcome}`;
+    } catch { return `判断：${outcome}`; }
   }
   private keyFor(entry: PublicModel) {
     if (entry.provider === 'siliconflow') return process.env.SILICONFLOW_API_KEY;
