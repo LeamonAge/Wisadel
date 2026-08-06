@@ -299,7 +299,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       trace: [],
       createdAt: new Date().toISOString()
     };
-    set((state) => ({ messages: [...state.messages, optimistic], sending: true, reconnecting: false, streamingText: '', reasoningSteps: ['正在准备请求'], reasoningCollapsed: false, sendError: null, pendingImageUrls: [], pendingAttachments: [] }));
+    set((state) => ({ messages: [...state.messages, optimistic], sending: true, reconnecting: false, streamingText: '', reasoningSteps: ['正在梳理任务目标与上下文', '正在确定需要核对的信息和执行顺序'], reasoningCollapsed: false, sendError: null, pendingImageUrls: [], pendingAttachments: [] }));
     try {
       const assistant = await api.streamMessage(
         sessionId,

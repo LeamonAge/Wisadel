@@ -973,6 +973,7 @@ function Conversation({
   const [backgroundStarting, setBackgroundStarting] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
+  const deliveredTaskIds = useRef(new Set<string>());
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -1004,13 +1005,21 @@ function Conversation({
   useEffect(() => {
     if (page !== 'chat' || !activeId) {
       setAgentTasks([]);
+      deliveredTaskIds.current.clear();
       return;
     }
     let active = true;
     const refresh = async () => {
       try {
         const tasks = await api.agentTasks(activeId);
-        if (active) setAgentTasks(tasks);
+        if (!active) return;
+        setAgentTasks(tasks);
+        const delivered = tasks.some((task) => task.status === 'succeeded' && !deliveredTaskIds.current.has(task.id));
+        tasks.filter((task) => task.status === 'succeeded').forEach((task) => deliveredTaskIds.current.add(task.id));
+        if (delivered) {
+          const messages = await api.messages(activeId);
+          if (active && useAppStore.getState().activeSessionId === activeId) useAppStore.setState({ messages });
+        }
       } catch {
         /* offline state is already surfaced elsewhere */
       }
@@ -1195,22 +1204,23 @@ function Conversation({
                   })}
                 </span>
               </div>
-              <div className="message-content">{renderMessageContent(message.content)}</div>
+              <div className="message-content">{renderMessageContent(message.content)}
+                {message.role === 'assistant' && !!message.trace?.length && (
+                  <details className="reasoning-panel reasoning-inline" open={!reasoningCollapsed}>
+                    <summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}>
+                      <Sparkles size={14} />
+                      思考过程
+                    </summary>
+                    <AgentTimeline steps={message.trace} completedAt={message.createdAt} />
+                  </details>
+                )}
+              </div>
               {message.role === 'assistant' && (
                 <div className="message-actions">
                   <button title={copiedMessageId === message.id ? '已复制' : '复制回复'} onClick={() => void copyMessage(message.id, message.content)}><Copy size={14} /></button>
                   <button title="继续生成" onClick={() => void send('请继续上一条回复。')}><ChevronDown size={14} /></button>
                   <button title="重新生成" onClick={() => void send('请基于本轮用户需求重新生成上一条回复。')}><RotateCcw size={14} /></button>
                 </div>
-              )}
-              {message.role === 'assistant' && !!message.trace?.length && (
-                <details className="reasoning-panel" open={!reasoningCollapsed}>
-                  <summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}>
-                    <Sparkles size={14} />
-                    执行过程
-                  </summary>
-                  <AgentTimeline steps={message.trace} completedAt={message.createdAt} />
-                </details>
               )}
               {!!message.imageUrls.length && (
                 <div className="message-images">
@@ -1259,17 +1269,17 @@ function Conversation({
               <div className="message-meta">
                 Wisadel<span>正在输入</span>
               </div>
-              <div className="message-content streaming">{streaming ? renderMessageContent(streaming) : <span className="thinking-placeholder">正在准备回复</span>}</div>
+              <div className="message-content streaming">{streaming ? renderMessageContent(streaming) : <span className="thinking-placeholder">正在梳理任务并生成公开执行计划</span>}
               {!!reasoningSteps.length && (
-                <details className="reasoning-panel" open={!reasoningCollapsed}>
+                <details className="reasoning-panel reasoning-inline" open={!reasoningCollapsed}>
                   <summary onClick={(event) => { event.preventDefault(); setReasoningCollapsed(!reasoningCollapsed); }}>
                     <Sparkles size={14} />
-                    思考过程与执行
+                    思考过程
                   </summary>
                   <LiveAgentThinking steps={reasoningSteps} />
                   <AgentTimeline steps={reasoningSteps} active />
                 </details>
-              )}
+              )}</div>
             </div>
           </div>
         )}

@@ -148,6 +148,9 @@ export class ChatController {
       const workspace = workspaceId ? (await this.workspaces.list(user.sub)).find((item) => item.id === workspaceId && item.trust === 'TRUSTED') : undefined;
       const settings = workspace?.settings;
       const profile = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings.agentProfile as { instructions?: string } | undefined : undefined;
+      const explicitLocalPath = enrichedContent.match(/[A-Za-z]:\\[^\r\n，。！？]+/)?.[0]?.replace(/[。！？]+$/, '').trim();
+      const pathGuidance = explicitLocalPath ? `USER-PROVIDED LOCAL PATH: ${explicitLocalPath}\nIf this path is inside the currently trusted workspace, use list_files/read_file directly. If it is outside, call request_workspace_change with path set exactly to this value; do not ask the user to upload files or manually repeat the path.` : undefined;
+      const agentInstructions = [profile?.instructions, pathGuidance].filter(Boolean).join('\n\n') || undefined;
       if (this.writingSkill.matches(enrichedContent)) {
         const result = await this.writingSkill.run({ prompt: enrichedContent, history, userId: user.sub, workspaceId, onProgress: sendReasoning, onUsage: (item) => usage.push(item) });
         for (const chunk of result.content.match(/[\s\S]{1,16}/g) ?? [result.content]) {
@@ -156,7 +159,7 @@ export class ChatController {
         }
       } else {
         if (history.length > 18) sendReasoning(`Summary Agent 正在压缩 ${history.length - 18} 条历史消息`);
-        for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, profile?.instructions, abortController.signal)) {
+        for await (const chunk of this.router.stream(session.model, history, enrichedContent, sendReasoning, (item) => usage.push(item), localContext, agentInstructions, abortController.signal)) {
           answer += chunk;
           response.write(`event: delta\ndata: ${JSON.stringify({ delta: chunk })}\n\n`);
         }
