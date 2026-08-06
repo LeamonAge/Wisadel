@@ -308,7 +308,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         attachments,
         get().sdParams,
         (delta) => { if (isCurrent()) set((state) => ({ streamingText: state.streamingText + delta })); },
-        (label) => { if (isCurrent()) set((state) => ({ reasoningSteps: state.reasoningSteps.at(-1) === label ? state.reasoningSteps : [...state.reasoningSteps, label].slice(-12) })); },
+        (label) => { if (isCurrent()) set((state) => ({ reasoningSteps: state.reasoningSteps.at(-1) === label ? state.reasoningSteps : [...state.reasoningSteps, label].slice(-30) })); },
         (action) => { if (isCurrent()) set((state) => ({ sdParams: { ...state.sdParams, ...action.params } })); },
         (task) => {
           if (!isCurrent()) return;

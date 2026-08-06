@@ -86,7 +86,7 @@ export class ProviderRouterService {
         onProgress?.(`正在调用 ${this.toolLabel(name)}`);
         const result = await this.executeTool(name, raw, localContext).catch((error) => `工具执行失败：${error instanceof Error ? error.message : '未知错误'}`);
         conversation.push({ role: 'tool', tool_call_id: call.id, content: result });
-        onProgress?.(`${this.toolLabel(name)} 已完成，正在根据结果继续处理`);
+        onProgress?.(this.toolCompletion(name, result));
       }
     }
     if (!text) text = '工具调用已达到十轮上限，请根据当前结果继续下一步。';
@@ -100,6 +100,17 @@ export class ProviderRouterService {
     return this.tools.execute({ name, arguments: raw });
   }
   private toolLabel(name: string) { return ({ list_files: '查看项目目录', search_files: '搜索相关文件', read_file: '读取文件', write_file: '写入文件', replace_in_file: '修改文件', run_command: '运行命令', run_workspace_script: '运行工作区脚本', search_web: '检索公开资料', fetch_web_page: '访问网页', download_file: '下载文件', copy_uploaded_file: '复制附件' } as Record<string, string>)[name] ?? 'Agent 工具'; }
+  private toolCompletion(name: string, result: string) {
+    const count = result.split(/\r?\n/).filter(Boolean).length;
+    if (/失败|error/i.test(result)) return `${this.toolLabel(name)} 返回了错误，正在调整后续步骤`;
+    if (name === 'read_file') return `已读取文件内容（${result.length} 字符），正在提取相关部分`;
+    if (name === 'list_files') return `目录扫描完成，发现 ${count} 个可见项目`;
+    if (name === 'search_files') return `代码搜索完成，找到 ${count} 处相关位置`;
+    if (name === 'write_file' || name === 'replace_in_file') return '文件修改已写入，正在继续核对结果';
+    if (name === 'run_command' || name === 'run_workspace_script') return '命令已返回，正在检查输出与下一步';
+    if (name === 'search_web' || name === 'fetch_web_page') return `资料获取完成，正在整理 ${count} 条可用信息`;
+    return `${this.toolLabel(name)} 已完成，正在整合结果`;
+  }
   private keyFor(entry: PublicModel) {
     if (entry.provider === 'siliconflow') return process.env.SILICONFLOW_API_KEY;
     if (entry.family === 'Claude') return process.env.OPENOX_CLAUDE_API_KEY ?? process.env.OPENOX_API_KEY ?? process.env.OPENOX_TEXT_API_KEY;
